@@ -286,19 +286,19 @@ TTL key_name
 
 ## Q&A
 #### Question: Who are you?
-```md
+```markdown
 Answer: 
 Victor Haynes, a software engineer and ERP consulting professional.
 Or "vanilli." on Discord
 ```
 #### What routing values (regions) are supported?
-```md
+```markdown
 Answer: 
 All of them other than China. Riot does not allow us to interact with Chinese data.
 ```
 
 #### Question: What services and methods are supported?
-```md
+```markdown
 Answer:  
 In my opinion, most of the important methods.  
 All methods for League-V4, League-EXP-V4, Match-V5, and Champion-Mastery-V4.
@@ -313,7 +313,8 @@ ACCOUNT-V1 supports:
 - /riot/account/v1/accounts/by-puuid
 - /riot/account/v1/active-shards/by-game
 
-If you want more methods or LoL-related services supported, feel free to request them and I'll do my best to add them.
+If you want more methods or LoL-related services supported,
+feel free to request them and I'll do my best to add them or open a pull request.
 ```
 
 #### Question: where do your rate limit values come from?
@@ -339,23 +340,26 @@ They are directionally correct but they are totally unreliable.
 That is why I pulled my rate limit values from actual response headers and not from here.
 ```
 #### What about Service Rate Limits?
-```md
+```markdown
 Answer: 
 New Destiny handles them as they are served.
 It's unknowable when they’ll occur, and they do _not_ come with `retry-after` headers. You can think of them as outages beyond our control.
-There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exception occurs. If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` to any integer greater than 0.
+There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exception occurs.
+If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` 
+to any integer greater than 0 in your own installation.
 
 ```
 #### Question: Does this work with `insert_name` Python API framework?
-```md
+```markdown
 Answer: 
 First of all, you can use this in just a python script file if you want.
-But if your framework allows asynchornous code to be executed and awaited properly inside of its endpoint functions/view functions/controllers then yes.
+But if your framework allows asynchornous code to be executed and awaited properly inside of
+its endpoint functions/view functions/controllers then yes.
 There is a production FastAPI application running this package for example.
 ```
 
 #### Question: What is `Redis`?
-```md
+```markdown
 Answer: 
 An in-memory key/value pair database that is extremely fast. Notably, it supports TTLs (Time to Live) so things automatically drop out of it when configured correctly.
 Good for data that does not need to be durable. 
@@ -366,7 +370,7 @@ See next answer.
 ```
 
 #### What is the design philosphy of `New Destiny`?
-```md
+```markdown
 Answer:
 `Respect`, `interpretability`, `unopinionated`.
 
