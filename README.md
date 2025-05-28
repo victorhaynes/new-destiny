@@ -349,15 +349,24 @@ Answer:
 Respect, interpretability, unopinionated.
 
 On respect:
-If you examine the source code you'll notice that 1) the rate limiter is checked and or incremented _before_ the request goes out to Riot and 2) there are "internal" and "external" enforcement types for the RiotRelatedRateLimitException series of errors. In a perfect world you would only ever experience internally-enforced rate limits. That means New Destiny prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen. But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less. Others deal with the 429s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
+If you examine the source code you'll notice that:
+1) the rate limiter is checked and or incremented _before_ the request goes out to Riot and 
+2) there are "internal" and "external" enforcement types for the RiotRelatedRateLimitException series of errors. 
+In a perfect world you would only ever experience internally-enforced rate limits. That means New Destiny prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
+The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen. But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. 
+This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less. Others deal with the 429s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
 
 On interpretability:
-It is very easy to connect to your Redis instance and see what is going on. For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is. Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
+It is very easy to connect to your Redis instance and see what is going on. For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
+Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
 This was created to solve my own problem. I had a rate limiting solution in place for my own application. It functioned well enough but it was a "black box". If you're curious about what is happening to your requests New Destiny probably gives you a way to figure it out. Especially in debug mode.
 
 On unopinionated:
-Other than the fact that you have to use use Python and Redis this package can work in more than one way. It plays nicely with standard asyncio syntax. Other packages move what I consider should-be application logic into the rate limiting solution. Rather than relying on a package full of custom methods like `get_my_summoner()` and `my_summoners_matches()` that have their own assumptions, you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want. You can decide what errors are ok and what are not, you can decide if one request depends on another etc.
+Other than the fact that you have to use use Python and Redis this package can work in more than one way. It plays nicely with standard asyncio syntax.
+Other packages move what I consider should-be application logic into the rate limiting solution.
+Rather than relying on a package full of custom methods like `get_my_summoner()` and `my_summoners_matches()` that have their own assumptions, you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want.
+You can decide what errors are ok and what are not, you can decide if one request depends on another etc.
 
 In short, New Destiny stays out of your way and lets you own your logic.
 ```
