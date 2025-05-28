@@ -318,7 +318,7 @@ feel free to request them and I'll do my best to add them or open a pull request
 ```
 
 #### Question: where do your rate limit values come from?
-```
+```markdown
 Answer: 
 The Application Rate Limits are explained above.
 For the Method Rate Limits examine the RATE_LIMITS_BY_SERVICE_BY_METHOD variable in rate_limit_helpers.py file.
@@ -326,9 +326,9 @@ As for where they come from, these are representations of what the Riot API actu
 (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now.
 These values changing substantially is an edge case I have not experienced in years.
 
-If rate limits do change and they are lower, New Destiny will still function/protect your app you just might actually see an inbound status code 429 response
-on the 1st request to hit Riot's API which means Riot blocked you not New Destiny.
-New Destiny will still block other outbound requests for the duration of the inbound "retry-after" header even if requests are running concurrently which is the primary thing you care about. 
+If rate limits do change and they are lower, `New Destiny` will still function/protect your app you just might actually see an inbound status code 429 response
+on the 1st request to hit Riot's API which means Riot blocked you not `New Destiny`.
+`New Destiny` will still block other outbound requests for the duration of the inbound "retry-after" header even if requests are running concurrently which is the primary thing you care about. 
 See "Design Philosphy" for more. 
 This still works because everything "funnels" through atomic and in-order Redis operations. Redis does this fast enough to where at reasonable volume you don't perceive this.
 If the rate limits change and they are higher then you lose the delta in throughput.
@@ -342,7 +342,7 @@ That is why I pulled my rate limit values from actual response headers and not f
 #### What about Service Rate Limits?
 ```markdown
 Answer: 
-New Destiny handles them as they are served.
+`New Destiny` handles them as they are served.
 It's unknowable when they’ll occur, and they do _not_ come with `retry-after` headers. You can think of them as outages beyond our control.
 There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exception occurs.
 If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` 
@@ -379,7 +379,7 @@ If you examine the source code you'll notice that:
 1) the rate limiter is checked and or incremented _before_ the request goes out to Riot and 
 2) there are "internal" and "external" enforcement types for the RiotRelatedRateLimitException series of errors. 
 In a perfect world you would only ever experience internally-enforced rate limits.
-That means New Destiny prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
+That means `New Destiny` prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
 The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen.
 But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. 
 This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less.
@@ -391,7 +391,7 @@ For a given outbound request you can see what rate limits apply to the request, 
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
 This was created to solve my own problem. I had a rate limiting solution in place for my own application. 
-It functioned well enough but it was a "black box". If you're curious about what is happening to your requests New Destiny probably gives you a way to figure it out.
+It functioned well enough but it was a "black box". If you're curious about what is happening to your requests `New Destiny` probably gives you a way to figure it out.
 Especially in debug mode.
 
 ##### On unopinionated:
@@ -402,5 +402,5 @@ Rather than relying on a package full of custom methods like `get_my_summoner()`
 you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want.
 You can decide what errors are ok and what are not, you can decide if one request depends on another etc.
 
-In short, New Destiny stays out of your way and lets you own your logic.
+In short, `New Destiny` stays out of your way and lets you own your logic.
 ```
