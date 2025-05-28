@@ -318,7 +318,8 @@ If you want more methods or LoL-related services supported, feel free to request
 #### Question: where do your rate limit values come from?
 ```
 Answer: 
-The Application Rate Limits are explained above. For the Method Rate Limits examine the RATE_LIMITS_BY_SERVICE_BY_METHOD variable in rate_limit_helpers.py file. As for where they come from, these are representations of what the Riot API actually returns in its headers when you hit a method (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now. These values changing substantially is an edge case I have not experienced in years.
+The Application Rate Limits are explained above. For the Method Rate Limits examine the RATE_LIMITS_BY_SERVICE_BY_METHOD variable in rate_limit_helpers.py file.
+As for where they come from, these are representations of what the Riot API actually returns in its headers when you hit a method (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now. These values changing substantially is an edge case I have not experienced in years.
 
 If rate limits do change and they are lower, New Destiny will still function/protect your app you just might actually see an inbound status code 429 response on the 1st request to hit Riot's API which means Riot blocked you not New Destiny. New Destiny will still block other outbound requests for the duration of the inbound "retry-after" header even if requests are running concurrently which is the primary thing you care about. See "Design Philosphy" for more. This still works because everything "funnels" through atomic and in-order Redis operations. Redis does this fast enough to where at reasonable volume you don't perceive this. If the rate limits change and they are higher then you lose the delta in throughput. But again I have not seen that actually happen and this edge case will eventually be handled.
 
@@ -327,20 +328,27 @@ Anyways and notably, not only are rate limits enforced by routing value they can
 #### What about Service Rate Limits?
 ```md
 Answer: 
-New Destiny handles them as they are served. It's unknowable when they’ll occur, and they do **not** come with `retry-after` headers. You can think of them as outages beyond our control.
+New Destiny handles them as they are served.
+It's unknowable when they’ll occur, and they do _not_ come with `retry-after` headers. You can think of them as outages beyond our control.
 There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exception occurs. If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` to any integer greater than 0.
 
 ```
 #### Question: Does this work with `insert_name` Python API framework?
 ```md
 Answer: 
-First of all, you can use this in just a python script file if you want. But if your framework allows asynchornous code to be executed and awaited properly inside of its endpoint functions/view functions/controllers then yes. There is a production FastAPI application running this package for example.
+First of all, you can use this in just a python script file if you want.
+But if your framework allows asynchornous code to be executed and awaited properly inside of its endpoint functions/view functions/controllers then yes.
+There is a production FastAPI application running this package for example.
 ```
 
 #### Question: What is `Redis`?
 ```md
 Answer: 
-An in-memory key/value pair database that is extremely fast. Notably, it supports TTLs (Time to Live) so things automatically drop out of it when configured correctly. Good for data that does not need to be durable. So while I would not store a User profile in Redis I would and do store rate limit keys (the identifier that ties an outgoing request to the applicable count/limit). If Redis crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be slightly out of sync with Riot's (the source of truth) version of your request count vs the alloted limit for a given time span. See next answer.
+An in-memory key/value pair database that is extremely fast. Notably, it supports TTLs (Time to Live) so things automatically drop out of it when configured correctly.
+Good for data that does not need to be durable. 
+So while I would not store a User profile in Redis I would and do store rate limit keys (the identifier that ties an outgoing request to the applicable count/limit).
+If Redis crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be slightly out of sync with Riot's (the source of truth) version of your request count vs the alloted limit for a given time span.
+See next answer.
 ```
 
 #### What is the design philosphy of `New Destiny`?
@@ -348,24 +356,32 @@ An in-memory key/value pair database that is extremely fast. Notably, it support
 Answer:
 Respect, interpretability, unopinionated.
 
-On respect:
+##### On respect:
 If you examine the source code you'll notice that:
 1) the rate limiter is checked and or incremented _before_ the request goes out to Riot and 
 2) there are "internal" and "external" enforcement types for the RiotRelatedRateLimitException series of errors. 
-In a perfect world you would only ever experience internally-enforced rate limits. That means New Destiny prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
-The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen. But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. 
-This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less. Others deal with the 429s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
+In a perfect world you would only ever experience internally-enforced rate limits.
+That means New Destiny prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
+The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen.
+But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. 
+This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less.
+Others deal with the 429s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
 
-On interpretability:
-It is very easy to connect to your Redis instance and see what is going on. For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
+##### On interpretability:
+It is very easy to connect to your Redis instance and see what is going on.
+For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
-This was created to solve my own problem. I had a rate limiting solution in place for my own application. It functioned well enough but it was a "black box". If you're curious about what is happening to your requests New Destiny probably gives you a way to figure it out. Especially in debug mode.
+This was created to solve my own problem. I had a rate limiting solution in place for my own application. 
+It functioned well enough but it was a "black box". If you're curious about what is happening to your requests New Destiny probably gives you a way to figure it out.
+Especially in debug mode.
 
-On unopinionated:
-Other than the fact that you have to use use Python and Redis this package can work in more than one way. It plays nicely with standard asyncio syntax.
+##### On unopinionated:
+Other than the fact that you have to use use Python and Redis this package can work in more than one way. 
+It plays nicely with standard asyncio syntax.
 Other packages move what I consider should-be application logic into the rate limiting solution.
-Rather than relying on a package full of custom methods like `get_my_summoner()` and `my_summoners_matches()` that have their own assumptions, you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want.
+Rather than relying on a package full of custom methods like `get_my_summoner()` and `my_summoners_matches()` that have their own assumptions, 
+you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want.
 You can decide what errors are ok and what are not, you can decide if one request depends on another etc.
 
 In short, New Destiny stays out of your way and lets you own your logic.
