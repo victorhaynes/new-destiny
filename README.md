@@ -305,7 +305,8 @@ All methods for League-V4, League-EXP-V4, Match-V5, and Champion-Mastery-V4.
 
 Summoner-V4:
 Everything except /fulfillment/v1/summoners/by-puuid/{rsoPUUID}
-This is off-limits. It will be added when I get around to integrating RSO into my own application. If there is high demand I may prioritize this.
+This is off-limits. It will be added when I get around to integrating RSO into my own application.
+If there is high demand I may prioritize this.
 
 ACCOUNT-V1 supports:
 - /riot/account/v1/accounts/by-riot-id
@@ -318,12 +319,24 @@ If you want more methods or LoL-related services supported, feel free to request
 #### Question: where do your rate limit values come from?
 ```
 Answer: 
-The Application Rate Limits are explained above. For the Method Rate Limits examine the RATE_LIMITS_BY_SERVICE_BY_METHOD variable in rate_limit_helpers.py file.
-As for where they come from, these are representations of what the Riot API actually returns in its headers when you hit a method (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now. These values changing substantially is an edge case I have not experienced in years.
+The Application Rate Limits are explained above.
+For the Method Rate Limits examine the RATE_LIMITS_BY_SERVICE_BY_METHOD variable in rate_limit_helpers.py file.
+As for where they come from, these are representations of what the Riot API actually returns in its headers when you hit a method 
+(what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now.
+These values changing substantially is an edge case I have not experienced in years.
 
-If rate limits do change and they are lower, New Destiny will still function/protect your app you just might actually see an inbound status code 429 response on the 1st request to hit Riot's API which means Riot blocked you not New Destiny. New Destiny will still block other outbound requests for the duration of the inbound "retry-after" header even if requests are running concurrently which is the primary thing you care about. See "Design Philosphy" for more. This still works because everything "funnels" through atomic and in-order Redis operations. Redis does this fast enough to where at reasonable volume you don't perceive this. If the rate limits change and they are higher then you lose the delta in throughput. But again I have not seen that actually happen and this edge case will eventually be handled.
+If rate limits do change and they are lower, New Destiny will still function/protect your app you just might actually see an inbound status code 429 response
+on the 1st request to hit Riot's API which means Riot blocked you not New Destiny.
+New Destiny will still block other outbound requests for the duration of the inbound "retry-after" header even if requests are running concurrently which is the primary thing you care about. 
+See "Design Philosphy" for more. 
+This still works because everything "funnels" through atomic and in-order Redis operations. Redis does this fast enough to where at reasonable volume you don't perceive this.
+If the rate limits change and they are higher then you lose the delta in throughput.
+But again I have not seen that actually happen and this edge case will eventually be handled.
 
-Anyways and notably, not only are rate limits enforced by routing value they can vary by routing value for the same method and this is not well documented. If you log onto your developer account account and click on "APPS" you would think the rate limits shown would be the Method Rate Limits for the given methods within a service but they are not. They are directionally correct but they are totally unreliable. That is why I pulled my rate limit values from actual response headers and not from here.
+Anyways and notably, not only are rate limits enforced by routing value they can vary by routing value for the same method and this is not well documented.
+If you log onto your developer account account and click on "APPS" you would think the rate limits shown would be the Method Rate Limits for the given methods within a service but they are not.
+They are directionally correct but they are totally unreliable. 
+That is why I pulled my rate limit values from actual response headers and not from here.
 ```
 #### What about Service Rate Limits?
 ```md
@@ -347,14 +360,15 @@ Answer:
 An in-memory key/value pair database that is extremely fast. Notably, it supports TTLs (Time to Live) so things automatically drop out of it when configured correctly.
 Good for data that does not need to be durable. 
 So while I would not store a User profile in Redis I would and do store rate limit keys (the identifier that ties an outgoing request to the applicable count/limit).
-If Redis crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be slightly out of sync with Riot's (the source of truth) version of your request count vs the alloted limit for a given time span.
+If Redis crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be slightly out of sync with Riot's (the source of truth) 
+version of your request count vs the alloted limit for a given time span.
 See next answer.
 ```
 
 #### What is the design philosphy of `New Destiny`?
 ```md
 Answer:
-Respect, interpretability, unopinionated.
+`Respect`, `interpretability`, `unopinionated`.
 
 ##### On respect:
 If you examine the source code you'll notice that:
