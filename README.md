@@ -27,13 +27,13 @@ You do not need to be an expert on all these topics to use this correctly but ba
 `New Destinity` requires environment variables to function. It also requires access to a Redis instance:
 - `ND_RIOT_API_KEY` takes a string value: enter your Riot-issued API key. If using a development key be sure to keep it updated.
 - `ND_PRODUCTION` takes an integer value 0 or 1: specify whether or not you are using a **Production API Key**. As you know from the Riot API Docs your **Application Rate Limit** differs depending on what kind of key you have:
-    - `0`: Development & Personal API Keys:
+    - `ND_PRODUCTION=0`: Development & Personal API Keys:
         - 20 requests, per 1 second, per routing value
         - 100 requests, per 2 minutes or 120 seconds, per routing value
-    - `1`: Production API Keys start at:
+    - `ND_PRODUCTION=1`: Production API Keys start at:
         - 500 requests, per 10 seconds, per routing value
         - 30,000 requests, per 10 minutes or 600 seconds, per routing value
-    - `1`: with custom settings: If you have higher limits you can specify them with the optional:
+    - `ND_PRODUCTION=1`: with custom settings: If you have higher limits you can specify them with the optional:
         - `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_SECONDS_WINDOW`
         - `ND_CUSTOM_MINUTES_LIMIT` and `ND_CUSTOM_MINUTES_WINDOW`
 - `ND_REDIS_URL` takes a string value: enter the address your Redis instance is running on.
@@ -287,6 +287,17 @@ keys *
 get key_name
 TTL key_name
 ```
+# Debugging / Testing
+```bash
+ND_RIOT_API_KEY="RGAPI-ABC-123"
+ND_DEBUG=1
+ND_PRODUCTION=0
+```
+Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosphy" for more.
+
+If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing 100 or 200 concurrently. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times becasue the straw that will break the proverbial camel's back never gets sent.
+
+If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will received *one* inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `enforcement type` of `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
 
 # Question & Answer
 
@@ -325,7 +336,7 @@ As for where they come from, these are representations of what the Riot API actu
 (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now.
 These values changing substantially is an edge case I have not experienced in years.
 
-If rate limits do change and they are lower, `New Destiny` will still function/protect your app you just might actually see an inbound status code 429 response
+If rate limits do change and they are lower, `New Destiny` will still function/protect your app you just might actually see an inbound status code `429` response
 on the 1st request to hit Riot's API which means Riot blocked you not `New Destiny`.
 `New Destiny` will still block other outbound requests for the duration of the inbound `retry-after` header even if requests are running concurrently which is the primary thing you care about. 
 See "Design Philosphy" for more. 
@@ -366,15 +377,14 @@ See next answer.
 
 On `respect`:
 
-If you examine the source code you'll notice that:
-`1)` the rate limiter is checked and or incremented **before** request goes out to Riot and 
-`2)` there are "internal" and "external" enforcement types for the `RiotRelatedRateLimitException` series of errors. 
+If you examine the source code you'll notice that: 1) the rate limiter is checked and or incremented **before** request goes out to Riot and 
+2) there are `internal` and `external` `enforcement types` for the `RiotRelatedRateLimitException` series of errors. 
 In a perfect world you would only ever experience internally-enforced rate limits.
 That means `New Destiny` prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
-The goal is to both prevent 429 and handle 429s, rather than just handling them once they happen.
-But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound 429s will occasionally happen. 
+The goal is to both prevent `429` and handle `429`s, rather than just handling them once they happen.
+But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound `429`s will occasionally happen. 
 This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less.
-Others deal with the 429s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
+Others deal with the `429`s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
 
 On `interpretability`:
 
@@ -401,5 +411,5 @@ In short, `New Destiny` stays out of your way and lets you own your logic.
 
 ## What is a UnspecifiedRateLimitExceeded error?
 Whatever Riot cooked burnt so this is a fail safe that prevents you from continuing to slam 
-them after getting a 429 that cannot be attributed to an Application, Method, or Service rate limit.
+them after getting a `429` that cannot be attributed to an Application, Method, or Service rate limit.
 It is rare but sometimes you get rate limited by Riot without explanation.
