@@ -5,3 +5,5 @@
 testpypi_recovery.txt
 testpypi_token.txt
 repackage.sh
+pypi_recovery.txt
+pypi_token.txt
