@@ -3,10 +3,11 @@ from new_destiny.riot_get_request import perform_riot_request
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
 from new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+# You can catch these exception subclasses if you want to but it is probably unnecessary:
 # from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
 import httpx
-import certifi
+import certifi 
 import redis
 import asyncio
 import time # Not a requirement, just for logging purposes
@@ -126,18 +127,19 @@ async def main():
     print("Dead man walkin'.")
     
     # 8) Example Four: Imagine you have a workflow that requires many requests to build something "whole".
-    # Imagine you want the match details of n = LAGE_NUBMER Faker matches.
+    # Imagine you want the match details for n = LAGE_NUBMER of Faker matches.
     # For either resource or rate limit concerns you do not want to fire off n = LAGE_NUBMER requests concurrently.
-    # You can use riot_request_with_retry() to automatically retry a request that gets rate limited (raises an exception of type RiotRelatedRateLimitException)
-    # up to a total number of attempts (default is 3).
-    # If a request gets rate limited more than the # of attempts specified the exception will propogate here. You can catch it with try/except.
-    # Other types of Exceptions will get raised immediately and do not get retried.
+    # You can use riot_request_with_retry() to automatically retry a request that gets rate limited 
+    # (raises an exception of type RiotRelatedRateLimitException)
+    # up to a total number of attempts (default is 3). This protects your workflow against rate limit exceptions.
+    # If a request gets rate limited more than the # of attempts specified the exception will propogate here. 
+    # You can catch it with try/except. Other types of Exceptions will get raised immediately and do not get retried.
 
     # You can still use standard python/asyncio tools to control the level of concurrecy or batch size
     # but this example simply demonstrates how this would work if you have a series requests that fire one at a time.
     # This function is useful if you have background jobs that interact with the Riot API.
     # It is probably inappropriate to have potential UI users of your application experience retry times
-    # if you do chose to expose a UI to users.
+    #  if you do chose to expose a UI to users.
     fakers_matches = [
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658139863",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",

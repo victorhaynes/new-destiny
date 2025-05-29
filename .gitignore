@@ -2,3 +2,6 @@
 *.pyc
 .venv/
 .pytest_cache/
+testpypi_recovery.txt
+testpypi_token.txt
+repackage.sh

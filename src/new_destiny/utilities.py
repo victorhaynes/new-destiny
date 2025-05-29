@@ -25,14 +25,13 @@ def custom_print(obj, color="cyan"):
     Pretty-print objects with colors and line breaks.
     Each dictionary key-value pair gets its own line.
     """
-    # Retrieve the color prefix from the COLOR_MAP
     color_prefix = COLOR_MAP.get(color.lower(), "") if color else ""
 
-    # Convert `httpx.Headers` (which is immutable) to a dictionary
+    # Convert httpx.Headers (which is immutable) to a dictionary
     if isinstance(obj, Headers):
         obj = dict(obj)
 
-    # Handle the case where the object is a dictionary (e.g., parsed JSON or headers)
+    # Handle the case where the object is a dictionary (ex. parsed JSON)
     if isinstance(obj, dict):
         print(
             f"{color_prefix}{json.dumps(obj, indent=4, sort_keys=True)}{Style.RESET_ALL}"

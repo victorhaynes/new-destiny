@@ -6,7 +6,7 @@ from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, 
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
-######  All time units are seconds ###
+###### All time units are seconds ####
 ###### ex. minutes_windows = 600 is ##
 ###### == 10 minutes #################
 
@@ -26,29 +26,6 @@ class BaseRateLimitingLogic:
 
         subdomain = hostname.split(".")[0]  # Extracts "na1" from "na1.api.riotgames.com"
         return subdomain.lower()
-
-
-    async def add_request(self):
-        """
-        Increment request count and set TTL only if the key exists AND the key newly created. If the key already
-        exists in redis then increment it but do not alter the TTL.
-        Remember that Method based rate limits do not necessarily have both types of limits (per seconds and per minutes...so we must check for existence).
-        We are also using pipelines to more carefully manage atomicity/handle race conditions.
-        """
-        async with self.redis.pipeline() as pipe:
-            # Use a pipeline to ensure atomicity
-            if self.seconds_key:
-                # pipe commands are enqueued
-                pipe.set(self.seconds_key, 1, ex=self.seconds_window, nx=True)
-                pipe.incr(self.seconds_key)
-
-            if self.minutes_key:
-            # pipe commands are enqueued
-                pipe.set(self.minutes_key, 1, ex=self.minutes_window, nx=True)
-                pipe.incr(self.minutes_key)  # pipe commands are enqueued
-
-            await pipe.execute()  # Execute everything atomically
-           
 
 
 class ApplicationRateLimiter(BaseRateLimitingLogic):
@@ -236,7 +213,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         with a value of "application"
         """
         if not retry_after:
-            retry_after = 70
+            retry_after = 68
             
         # Make sure scripts are initialized
         if self.blocking_script_sha is None:
@@ -480,7 +457,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         429 response with X-Rate-Limit-Type header with a value of "method"
         """
         if not retry_after:
-            retry_after = 70
+            retry_after = 68
         
         # Make sure scripts are initialized
         if self.blocking_script_sha is None:
@@ -545,7 +522,7 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
     
     async def write_inbound_service_rate_limit(self, offending_context):
         """Set the service rate limit key in Redis with a TTL."""
-        # Create the key with a 70-second TTL if it doesn't already exist (NX)
+        # Create the key with a 68-second TTL if it doesn't already exist (NX)
         await self.redis.set(self.service_key, 1, ex=self.__class__.SERVICE_BLOCK_DURATION, nx=True)
 
         raise ServiceRateLimitExceeded(
@@ -597,8 +574,8 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
         429 response with a missing X-Rate-Limit-Type header or unknown value. 
         """
         if not retry_after:
-            retry_after = 69
-        # Create the key with a 70-second TTL if it doesn't already exist (NX)
+            retry_after = 68
+        # Create the key with a 68-second TTL if it doesn't already exist (NX)
         await self.redis.set(self.blocking_key, 1, ex=retry_after, nx=True)
         raise UnspecifiedRateLimitExceeded(
             retry_after=retry_after,
