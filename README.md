@@ -287,7 +287,7 @@ keys *
 get key_name
 TTL key_name
 ```
-# Debugging / Testing
+# Debugging / Examining The Behavior
 ```bash
 ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_DEBUG=1
@@ -297,7 +297,7 @@ Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Exami
 
 If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing 100 or 200 concurrently. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times becasue the straw that will break the proverbial camel's back never gets sent.
 
-If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will received *one* inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `enforcement type` of `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
+If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will received **one** inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` attribute = `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
 
 # Question & Answer
 
