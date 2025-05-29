@@ -1,6 +1,6 @@
     ...I ain't got time to bleed.
 # Welcome to `New Destiny` 
-- A fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on Python, asyncio, and Redis.
+- A fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on `Python`, `asyncio`, and `Redis`.
 - `New Destiny` is responsible for respecting the communicated Riot API rate limits.
 - _You_ are responsible for protecting your environment variables. Do not expose your `ND_RIOT_API_KEY` to anyone not involved with your project, including Users and Github/source control.
 - Plays nice with and without Docker.
@@ -13,12 +13,12 @@
 - If you have fundamental questions about how the API works you seek answers in the (un?)official Riot `Third Party Developer Community` discord.
 
 # What these docs and this package are not
-- A Python tutorial
+- A `Python` tutorial
 - A specific backend/API framework tutorial
-- An async/asyncio tutorial
-- A Docker tutorial
-- A Redis tutorial
-- An HTTPX tutorial
+- An async/`asyncio` tutorial
+- A `Docker` tutorial
+- A `Redis` tutorial
+- An `HTTPX` tutorial
 - A replacement for thoroughly reading the Riot Games API documentation
 
 You do not need to be an expert on all these topics to use this correctly but basic knowledge will help.
@@ -36,9 +36,9 @@ You do not need to be an expert on all these topics to use this correctly but ba
     - `ND_PRODUCTION=1`: with custom settings: If you have higher limits you can specify them with the optional:
         - `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_SECONDS_WINDOW`
         - `ND_CUSTOM_MINUTES_LIMIT` and `ND_CUSTOM_MINUTES_WINDOW`
-- `ND_REDIS_URL` takes a string value: enter the address your Redis instance is running on.
-Can be an actual address, "localhost", or "service_name" if your application code & Redis are in the same Docker compose stack.
-- `ND_REDIS_PORT` takes an integer value: enter the port number Redis is listening to.
+- `ND_REDIS_URL` takes a string value: enter the address your `Redis` instance is running on.
+Can be an actual address, "localhost", or "service_name" if your application code & `Redis` are in the same Docker compose stack.
+- `ND_REDIS_PORT` takes an integer value: enter the port number `Redis` is listening to.
 - `ND_DEBUG` takes an integer value 0 or 1: decide if you want the rate limiter to log what it is attempting to do/experiencing. Very useful if you are experiencing unexpected behavior in your application code or from the Riot API (which does happen). Highly recommend you set this to 1 until you are comfortable with your code and mine. Note debug mode is safe to use in an production environment. It **will** expose to whoever has access to your server logs: things like player PUUIDs (which are encrypted and have basically no malintent usecase), response headers, resesponse bodies, show what URL is being tried, along with the current state of your rate limiter(s). But `New Destiny` will **not** expose your API key.
 
 
@@ -293,11 +293,11 @@ ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_DEBUG=1
 ND_PRODUCTION=0
 ```
-Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosphy" for more.
+Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosophy" for more.
 
-If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing 100 or 200 concurrently. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times becasue the straw that will break the proverbial camel's back never gets sent.
+If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing 100 or 200 concurrently. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times because the straw that will break the proverbial camel's back never gets sent.
 
-If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will received **one** inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` attribute = `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
+If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will receive **one** inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` attribute = `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
 
 # Question & Answer
 
@@ -328,24 +328,24 @@ If there is high demand I may prioritize this.
 If you want more methods or LoL-related services supported,
 feel free to request them and I'll do my best to add them or open a pull request.
 
-## Were do your rate limit values come from?
+## Where do your rate limit values come from?
 
 The Application Rate Limits are explained above.
 For the Method Rate Limits examine the `RATE_LIMITS_BY_SERVICE_BY_METHOD` variable in `rate_limit_helpers.py` file.
 As for where they come from, these are representations of what the Riot API actually returns in its headers when you hit a method 
 (what we think of as endpoints) and they are hard coded. Eventually these will be synced/explicitly checked at initialization but not for now.
-These values changing substantially is an edge case I have not experienced in years.
+These values changing substantially are an edge case I have not experienced in years.
 
 If rate limits do change and they are lower, `New Destiny` will still function/protect your app you just might actually see an inbound status code `429` response
 on the 1st request to hit Riot's API which means Riot blocked you not `New Destiny`.
 `New Destiny` will still block other outbound requests for the duration of the inbound `retry-after` header even if requests are running concurrently which is the primary thing you care about. 
 See "Design Philosphy" for more. 
-This still works because everything "funnels" through atomic and in-order Redis operations. Redis does this fast enough to where at reasonable volume you don't perceive this.
+This still works because everything "funnels" through atomic and in-order `Redis` operations. `Redis` does this fast enough to where at reasonable volume you don't perceive this.
 If the rate limits change and they are higher then you lose the delta in throughput.
 But again I have not seen that actually happen and this edge case will eventually be handled.
 
-Anyways and notably, not only are rate limits enforced by routing value they can vary by routing value for the same method and this is not well documented.
-If you log onto your developer account account and click on "APPS" you would think the rate limits shown would be the Method Rate Limits for the given methods within a service but they are not.
+Anyway and notably, not only are rate limits enforced by routing value they can vary by routing value for the same method and this is not well documented.
+If you log onto your developer account and click on "APPS" you would think the rate limits shown would be the Method Rate Limits for the given methods within a service but they are not.
 They are directionally correct but they are totally unreliable. 
 That is why I pulled my rate limit values from actual response headers and not from here.
 
@@ -357,9 +357,9 @@ There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exce
 If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` 
 to any integer greater than 0 in your own installation.
 
-## Does this work with `insert_name` Python API framework?
+## Does this work with `insert_name` `Python` API framework?
 First of all, you can use this in just a python script file if you want.
-But if your framework allows asynchornous code to be executed and awaited properly inside of
+But if your framework allows asynchronous code to be executed and awaited properly inside of
 its endpoint functions/view functions/controllers then yes.
 There is a production FastAPI application running this package for example.
 
@@ -367,9 +367,9 @@ There is a production FastAPI application running this package for example.
 ## What is `Redis`?
 An in-memory key/value pair database that is extremely fast. Notably, it supports TTLs (Time to Live) so things automatically drop out of it when configured correctly.
 Good for data that does not need to be durable. 
-So while I would not store a User profile in Redis I would and do store rate limit keys (the identifier that ties an outgoing request to the applicable count/limit).
-If Redis crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be out of sync with Riot's (the source of truth) 
-version of your request count vs the alloted limit for a given time span. Limits are typically only applied to up to 10 minute windows so they do reset naturally.
+So while I would not store a User profile in `Redis` I would and do store rate limit keys (the identifier that ties an outgoing request to the applicable count/limit).
+If `Redis` crashes, you delete the keys, or you restart it etc. the worst case scenario is you will be out of sync with Riot's (the source of truth) 
+version of your request count vs the allotted limit for a given time span. Limits are typically only applied to up to 10 minute windows so they do reset naturally.
 See next answer.
 
 ## What is the design philosphy of `New Destiny`?
@@ -388,8 +388,8 @@ Others deal with the `429`s as they come and do not bother trying to prevent the
 
 On `interpretability`:
 
-It is very easy to connect to your Redis instance and see what is going on.
-Every `New Destiny` related Redis key begins with a `nd_` prefix.
+It is very easy to connect to your `Redis` instance and see what is going on.
+Every `New Destiny` related `Redis` key begins with a `nd_` prefix.
 For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
@@ -399,17 +399,17 @@ Especially in debug mode.
 
 On `unopinionated`:
 
-Other than the fact that you have to use use Python and Redis this package can work in more than one way. 
-It plays nicely with standard asyncio syntax.
+Other than the fact that you have to use `Python` and `Redis` this package can work in more than one way. 
+It plays nicely with standard `asyncio` syntax.
 Other packages move what I consider should-be application logic into the rate limiting solution.
 Rather than relying on a package full of custom methods like `get_my_summoner()` and `my_summoners_matches()` that have their own assumptions, 
-you decide what you want and how you want it to work by simply building a URL and using asyncio to deal with as much or as little concurrency as you want.
+you decide what you want and how you want it to work by simply building a URL and using `asyncio` to deal with as much or as little concurrency as you want.
 You can decide what errors are ok and what are not, you can decide if one request depends on another etc.
 
 In short, `New Destiny` stays out of your way and lets you own your logic.
 
 
-## What is a UnspecifiedRateLimitExceeded error?
-Whatever Riot cooked burnt so this is a fail safe that prevents you from continuing to slam 
+## What is a `UnspecifiedRateLimitExceeded` error?
+Whatever Riot cooked burnt so this is a fail-safe that prevents you from continuing to slam 
 them after getting a `429` that cannot be attributed to an Application, Method, or Service rate limit.
 It is rare but sometimes you get rate limited by Riot without explanation.

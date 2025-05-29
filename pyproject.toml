@@ -1,6 +1,6 @@
 [project]
 name = "new-destiny"
-version = "0.1.6"
+version = "0.1.8"
 description = "A fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on Python, asyncio, and Redis."
 authors = [
     {name = "Victor Haynes",email = "vichaynesdevelopment@gmail.com"}
