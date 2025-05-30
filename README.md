@@ -7,6 +7,7 @@
 - [GitHub](https://github.com/victorhaynes/new-destiny)
 
 # User Expectations
+- Basic willingness to respect the Riot API standards
 - Basic python knowledge
 - Basic asynchronous programming understanding
 - Read Riot's documentation for their API. Then read it again.
@@ -295,9 +296,256 @@ ND_PRODUCTION=0
 ```
 Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosophy" for more.
 
-If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing 100 or 200 concurrently. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times because the straw that will break the proverbial camel's back never gets sent.
+### Important:
+`New Destiny` works best when you configure it to use your actual `Application Rate Limit` values. Just because you can override it does not mean you should. The examples below will illuminte why.
 
-If you want to see the `external` rate limiting behavior set `ND_PRODUCTION=1` and use high values for `ND_CUSTOM_SECONDS_LIMIT` and `ND_CUSTOM_MINUTES_LIMIT`. If you actually exceed whatever your real assigned rate limit(s) is/are you will receive **one** inbound `429` response from Riot which will raise a specific `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` attribute = `external`. For every request you send into `New Destiny` (even concurrently) after Riot sends its blocking signal you will receive the applicable `RiotRelatedRateLimitException` exception subclass with an `.enforcement type` of `internal`. So as far as Riot sees you only tried to exceed your assigned rate limit one time. They will never see the other N - M requests. That is what we call a gentlemanly rate limiter.
+ This package also works best when you size your concurrent request batches appropriately relative to the size of your rate limits. If you know you're limited to 10/s or 500/10s don't spawn 1000 concurrent requests. `New Destiny` protects almost flawlessly for **synchronous** (one at a time) requests. However edge cases exist where you can experience multiple inbound `429`s during a batch of **concurrent** requests. The larger your batch size is relative to your limits the greater chance there is for this. If you have N total items split into M batches you can experience multiple inbound `429`s within a batch and this is not ideal, but you will **not** experience more `429s` after the first batch than ran into them.
+
+### Example 1: Blocked by `New Destiny` (good/respectful/standard scenario) not by Riot.
+
+If you want to see the actual `internal` rate limiting behavior in action set `ND_PRODUCTION=0` and simply spawn a lot of concurrent `perform_riot_request()`. Try doing N = 25 concurrently and view the output. This should easily exceed the Personal & Development API key rate limits and this will protect you from slamming Riot N - M times because the straw that will break the proverbial camel's back never gets sent. It gets blocked internally.
+```py
+    start_time = time.monotonic()
+    match_endpoints = [
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+    ]
+
+    start_time = time.monotonic()
+    async with httpx.AsyncClient(verify=ssl_context) as client:
+        batch_results = await asyncio.gather(
+            *[perform_riot_request(
+                riot_endpoint=endpoint,
+                client=client,
+                async_redis_client=async_redis_client)
+                for endpoint in match_endpoints]
+        , return_exceptions=True)
+    
+    for i, res in enumerate(batch_results):
+        if not isinstance(res, Exception):
+            print(i+1, "- got real data")
+        else:
+            # RiotRelatedRateLimitException(s) have an .enforcement_type attribute
+            t = res.enforcement_type + "ly blocked"
+            if "internal" in t:
+                custom_print(t, "yellow")
+            elif "external" in t:
+                custom_print(t, "red")
+            else: 
+                raise res # Some other exception is at play
+
+
+    print("BEHAVIOR EXAMPLE 1")
+    print("Type:", type(batch_results))
+    print("Length:", len(batch_results))
+    print("Type of first element", type(batch_results[0]))
+    print("Time:", time.monotonic() - start_time)
+```
+
+### Example 2a: Blocked by Riot (or a "leakage" scenario)
+```sh
+# Real Production keys will have limits too high for this example to illustrate
+ND_RIOT_API_KEY="USE_A_DEVELOPMENT_OR_PERSONAL_KEY"
+ND_PRODUCTION=1
+ND_DEBUG=0 # Turn it off to not clutter the output
+ND_CUSTOM_SECONDS_LIMIT=9999 # well above the Dev/Personal limit
+ND_CUSTOM_SECONDS_WINDOW=20 # well above the Dev/Personal limit
+```
+
+If you want to see the `external` rate limiting behavior use a Personal or Development API key, set `ND_PRODUCTION=1`, and use high values like `ND_CUSTOM_SECONDS_LIMIT=9999` and `ND_CUSTOM_SECONDS_WINDOW=20`. If you actually exceed whatever your real assigned rate limit(s) is/are you will receive inbound `429` responses from Riot and they will raise a specific `RiotRelatedRateLimitException` exception subclass with an `.enforcement_type="external"` attribute. This is the behavior within a batch.
+```py
+# Run the same code as Example 1 but with more URLs that will exceed 10/s requests
+    match_endpoints = [
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+    ]
+```
+### Example 2b: Blocked by Riot first, then `New Destiny` while looping through baches
+With the same `.env` config as Example 2a:
+```py
+    start_time = time.monotonic()
+    match_endpoints = [
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+    ]
+
+    start_time = time.monotonic()
+    async with httpx.AsyncClient(verify=ssl_context) as client:
+        for batch_start in range(0, len(match_endpoints), 30):
+            current_batch = match_endpoints[batch_start:batch_start + 30]
+            
+            batch_results = await asyncio.gather(
+                *[perform_riot_request(
+                    riot_endpoint=endpoint,
+                    client=client,
+                    async_redis_client=async_redis_client)
+                    for endpoint in current_batch],
+                return_exceptions=True
+            )
+
+            for i, res in enumerate(batch_results):
+                index = batch_start + i + 1
+                if not isinstance(res, Exception):
+                    print(index, "- got real data")
+                else:
+                    t = getattr(res, 'enforcement_type', 'unknown') + "ly blocked"
+                    if "internal" in t:
+                        custom_print(t, "yellow")
+                    elif "external" in t:
+                        custom_print(t, "red")
+                    else: 
+                        raise res  # Some other exception is at play
+
+
+    print("BEHAVIOR EXAMPLE")
+    print("Type:", type(batch_results))
+    print("Length:", len(batch_results))
+    print("Type of first element", type(batch_results[0]))
+    print("Time:", time.monotonic() - start_time)
+```
+If you are looping through a list of items in batches one batch may experierence multiple `429`s but subsequent batches will get blocked internally. **Some amount of leakage is natural** as my counters and TTLs are not perfectly in sync with Riot. But through standard configuration and sensible usage this is not much of a problem. My own 3rd party application is running `New Destiny` with automated background jobs and it is in good standing. The vast majority of rate limit exceptions I experience are internally enforced.
 
 # Question & Answer
 
@@ -337,10 +585,8 @@ As for where they come from, these are representations of what the Riot API actu
 These values changing substantially are an edge case I have not experienced in years.
 
 If rate limits do change and they are lower, `New Destiny` will still function/protect your app you just might actually see an inbound status code `429` response
-on the 1st request to hit Riot's API which means Riot blocked you not `New Destiny`.
-`New Destiny` will still block other outbound requests for the duration of the inbound `retry-after` header even if requests are running concurrently which is the primary thing you care about. 
-See "Design Philosphy" for more. 
-This still works because everything "funnels" through atomic and in-order `Redis` operations. `Redis` does this fast enough to where at reasonable volume you don't perceive this.
+on the 1st request/concurrent batch to hit Riot's API which means Riot blocked you not `New Destiny` (see examples for exactly how this works).
+`New Destiny` will still block other outbound requests for the duration of the inbound `retry-after` header.
 If the rate limits change and they are higher then you lose the delta in throughput.
 But again I have not seen that actually happen and this edge case will eventually be handled.
 
@@ -378,12 +624,12 @@ See next answer.
 On `respect`:
 
 If you examine the source code you'll notice that: 1) the rate limiter is checked and or incremented **before** request goes out to Riot and 
-2) there are `internal` and `external` `enforcement types` for the `RiotRelatedRateLimitException` series of errors. 
+2) there are `internal` and `external` `enforcement_types` for the `RiotRelatedRateLimitException` series of errors. 
 In a perfect world you would only ever experience internally-enforced rate limits.
 That means `New Destiny` prevented you from ever actually exceeding the rate limit for the request you are making (even by 1 request). 
 The goal is to both prevent `429` and handle `429`s, rather than just handling them once they happen.
 But staying perfectly on top of whatever Riot is cooking is challenging so real in-bound `429`s will occasionally happen. 
-This is nothing to panic about but for my precious production Riot API key, I prefer to be more respectful rather than less.
+This is nothing to panic about as pointed out in the examples.
 Others deal with the `429`s as they come and do not bother trying to prevent them in the first place. I try to prevent them.
 
 On `interpretability`:

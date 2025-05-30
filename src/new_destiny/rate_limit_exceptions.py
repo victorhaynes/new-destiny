@@ -7,7 +7,7 @@ def format_offending_context(offending_context) -> str:
     """
     Format the offending_context into a readable multiline string. 
     Used for better logging support when a Riot rate limit exception or a general non-ok response (RiotAPIError) occurs.
-    Expects offending_context to be a list: [headers, body].
+    Expects offending_context to be a dict: {headers: obj, body: obj}.
     The headers are pretty printed with one key per line.
     The body is converted to a JSON string (if possible) and wrapped to 100 characters per line,
     with a maximum of 30 lines.
@@ -64,11 +64,11 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
             "ApplicationRateLimitExceeded:",
             f"  retry_after: {self.retry_after}",
             f"  seconds_key: {self.seconds_key}",
-            f"  seconds_count: {self.seconds_count}",
+            f"  seconds_count: {self.seconds_count if self.seconds_count else 'N/A - Riot headers source of truth'}",
             f"  seconds_limit: {self.seconds_limit}",
             f"  seconds_window: {self.seconds_window}",
             f"  minutes_key: {self.minutes_key}",
-            f"  minutes_count: {self.minutes_count}",
+            f"  minutes_count: {self.minutes_count if self.minutes_count else 'N/A - Riot headers source of truth'}",
             f"  minutes_limit: {self.minutes_limit}",
             f"  minutes_window: {self.minutes_window}",
             f"  enforcement_type: {self.enforcement_type}",
@@ -124,11 +124,11 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
             f"  retry_after: {self.retry_after}",
             f"  method: {self.method}",
             f"  seconds_key: {self.seconds_key}",
-            f"  seconds_count: {self.seconds_count}",
+            f"  seconds_count: {self.seconds_count if self.seconds_count else 'N/A - Riot headers source of truth'}",
             f"  seconds_limit: {self.seconds_limit}",
             f"  seconds_window: {self.seconds_window}",
             f"  minutes_key: {self.minutes_key}",
-            f"  minutes_count: {self.minutes_count}",
+            f"  minutes_count: {self.minutes_count if self.minutes_count else 'N/A - Riot headers source of truth'}",
             f"  minutes_limit: {self.minutes_limit}",
             f"  minutes_window: {self.minutes_window}",
             f"  enforcement_type: {self.enforcement_type}",

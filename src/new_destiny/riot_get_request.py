@@ -14,7 +14,6 @@ riot_key = ND_RIOT_API_KEY
 debug = int(ND_DEBUG)
 auth_headers = {'X-Riot-Token': riot_key}
 
-
 async def perform_riot_request(riot_endpoint, client: httpx.AsyncClient, async_redis_client):
     # Instantiate the rate limiters
     application_rate_limiter = ApplicationRateLimiter(riot_endpoint, async_redis_client)
@@ -33,7 +32,7 @@ async def perform_riot_request(riot_endpoint, client: httpx.AsyncClient, async_r
     if debug: custom_print(riot_endpoint, color="black")
     response = await client.get(riot_endpoint, headers=auth_headers)
     status = response.status_code
-
+    
     # 200 OK
     if status == 200:
         body = response.json()
