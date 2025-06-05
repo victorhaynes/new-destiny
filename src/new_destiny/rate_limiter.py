@@ -189,7 +189,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         
         if is_allowed == 0:  # Request not allowed
             raise ApplicationRateLimitExceeded(
-                retry_after=retry_after,
+                retry_after=retry_after if retry_after >= 1 else 1,
                 minutes_key=self.minutes_key,
                 seconds_key=self.seconds_key,
                 seconds_window=self.seconds_window,
@@ -433,7 +433,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
 
         if is_allowed == 0:  # Request not allowed
             raise MethodRateLimitExceeded(
-                retry_after=retry_after,
+                retry_after=retry_after if retry_after >= 1 else 1,
                 method=self.method,
                 minutes_key=self.minutes_key,
                 seconds_key=self.seconds_key,

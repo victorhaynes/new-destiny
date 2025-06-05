@@ -89,7 +89,7 @@ import httpx
 import certifi
 import redis
 import asyncio
-import time # Not a requrement, just for logging purposes
+import time # Not a requirement, just for logging purposes
 
 
 # 2) Configure SSL Context for HTTPX. Accept this default or choose your own.
