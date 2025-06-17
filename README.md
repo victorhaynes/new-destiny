@@ -1,6 +1,7 @@
     ...I ain't got time to bleed.
-# Welcome to `New Destiny` 
-- A fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on `Python`, `asyncio`, and `Redis`.
+# Welcome to `New Destiny`
+- The hardest part of being a 3rd party Riot dev is waiting for production approval, the second hardest part is sorting your rate limiting solution.
+- `New Destiny` is an easy to use, fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on `Python`, `asyncio`, and `Redis`.
 - `New Destiny` is responsible for respecting the communicated Riot API rate limits.
 - _You_ are responsible for protecting your environment variables. Do not expose your `ND_RIOT_API_KEY` to anyone not involved with your project, including Users and Github/source control.
 - Plays nice with and without Docker.
@@ -10,19 +11,9 @@
 - Basic willingness to respect the Riot API standards
 - Basic python knowledge
 - Basic asynchronous programming understanding
-- Read Riot's documentation for their API. Then read it again.
+- Foundational understanding of Redis
+- Read Riot's documentation for their API ❗️ Then read it again❗️
 - If you have fundamental questions about how the API works you seek answers in the (un?)official Riot `Third Party Developer Community` discord.
-
-# What these docs and this package are not
-- A `Python` tutorial
-- A specific backend/API framework tutorial
-- An async/`asyncio` tutorial
-- A `Docker` tutorial
-- A `Redis` tutorial
-- An `HTTPX` tutorial
-- A replacement for thoroughly reading the Riot Games API documentation
-
-You do not need to be an expert on all these topics to use this correctly but basic knowledge will help.
 
 # Simple Configuration
 `New Destinity` requires environment variables to function. It also requires access to a Redis instance:
@@ -42,7 +33,7 @@ Can be an actual address, "localhost", or "service_name" if your application cod
 - `ND_REDIS_PORT` takes an integer value: enter the port number `Redis` is listening to.
 - `ND_DEBUG` takes an integer value 0 or 1: decide if you want the rate limiter to log what it is attempting to do/experiencing. Very useful if you are experiencing unexpected behavior in your application code or from the Riot API (which does happen). Highly recommend you set this to 1 until you are comfortable with your code and mine. Note debug mode is safe to use in an production environment. It **will** expose to whoever has access to your server logs: things like player PUUIDs (which are encrypted and have basically no malintent usecase), response headers, resesponse bodies, show what URL is being tried, along with the current state of your rate limiter(s). But `New Destiny` will **not** expose your API key.
 
-
+## Example Configuration
 Use an `.env` file to declare these values:
 
 ```bash
@@ -55,7 +46,7 @@ ND_REDIS_URL="your_redis_address_or_docker_service_name"
 ND_REDIS_PORT=123
 ND_DEBUG=1
 ```
-In the rare case where Riot has given you heightened allowances you can configure your custom Application Rate limits and window durations **using time in seconds--NOT minutes**. You are not allowed to use custom limits if you are not in production mode:
+In the rare case where Riot has given you heightened allowances you can configure your custom `Application Rate Limits` and window durations **using time in seconds--NOT minutes**. You are not allowed to use custom limits if you are not in production mode:
 ```bash
 # Instead of the Application Rate Limit being the default 500/10s and 30,000/10m
 # This is specifying 900/s and 60,000/3m
@@ -103,13 +94,14 @@ async def main():
     # Example application code:
     # do_some_work() ...
 
-    # 5) Example One: Time to use New Destiny
+    """
+    EXAMPLE 1:
+    A simple GET request using New Destiny
+    """
     start_time = time.monotonic()
     async with httpx.AsyncClient(verify=ssl_context) as client:
-        """
-        Note: You may only use actual, properly formatted Riot API Endpoints.
-        Otherwise New Destiny will not know what ratelimit applies to the request.
-        """
+        # Note: You may only use actual, properly formatted Riot API Endpoints.
+        # Otherwise New Destiny will not know what ratelimit applies to the request.
         region = "asia"
         gamename = "hide on bush"
         tagline = "KR1"
@@ -120,14 +112,19 @@ async def main():
             async_redis_client=async_redis_client
         )
     
-    # 6) Do whatever you want with the response
+    """
+    Do whatever you want with the response
+    """
     print("EXAMPLE 1")
     print("Type:", type(account_details))
     print("Response:", account_details)
     print("Time:", time.monotonic() - start_time)
     print("Feelin' lucky?")
 
-    # 7) Example Two: New Destiny with concurrency. Raise first exception (which include RiotRelatedRateLimitException(s)) if any encoutnered.
+    """
+    EXAMPLE 2: New Destiny with concurrency.
+    Raise first exception (which include RiotRelatedRateLimitException(s)) if any encoutnered.
+    """
     try:
         match_endpoints = [
             "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
@@ -180,7 +177,10 @@ async def main():
         # do with Riot, likely has nothing to do with New Destiny, and is likely your application code
         pass
 
-    # 7) Example Three: New Destiny with concurrency. Supress but gather any experienced errors.
+    """
+    EXAMPLE 3: New Destiny with concurrency.
+    Supress but gather any experienced errors.
+    """
     start_time = time.monotonic()
     async with httpx.AsyncClient(verify=ssl_context) as client:
         batch_results = await asyncio.gather(
@@ -194,9 +194,9 @@ async def main():
     for result in batch_results:
         if isinstance(result, RiotRelatedRateLimitException):
             print(result.retry_after)
-            # Do whatever you want
+            # Do whatever you want 
         elif isinstance(result, Exception):
-            # Potentially raise the Exception, filter it out etc,
+            # Potentially raise the Exception of other types, filter it out etc,
             pass
 
     print("EXAMPLE 3")
@@ -221,20 +221,22 @@ ND_DEBUG=1
 ```py
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
 
-    # 8) Example Four: Imagine you have a workflow that requires many requests to build something "whole".
-    # Imagine you want the match details for n = LAGE_NUBMER of Faker matches.
+    """
+    EXAMPLE 4: Imagine you have a workflow that requires many requests to build something "whole".
+    """
+    # Imagine you want the match details for n = LAGE_NUBMER of T1 Faker's matches.
     # For either resource or rate limit concerns you do not want to fire off n = LAGE_NUBMER requests concurrently.
     # You can use riot_request_with_retry() to automatically retry a request that gets rate limited 
     # (raises an exception of type RiotRelatedRateLimitException)
     # up to a total number of attempts (default is 3). This protects your workflow against rate limit exceptions.
-    # If a request gets rate limited more than the # of attempts specified the exception will propogate here. 
-    # You can catch it with try/except. Other types of Exceptions will get raised immediately and do not get retried.
+    # If a request gets rate limited more than the # of attempts specified the exception will propogate to the context of the caller like normal. 
+    # You can catch it with try/except. Other types of Exceptions will get raised/propagate immediately and do not get retried.
 
     # You can still use standard python/asyncio tools to control the level of concurrecy or batch size
     # but this example simply demonstrates how this would work if you have a series requests that fire one at a time.
     # This function is useful if you have background jobs that interact with the Riot API.
-    # It is probably inappropriate to have potential UI users of your application experience retry times
-    #  if you do chose to expose a UI to users.
+    # This is not the "default" method because it is probably inappropriate to have potential UI users of your application experience retry times
+    # if you do chose to expose a UI to users.
     fakers_matches = [
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658139863",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
@@ -348,7 +350,8 @@ If you want to see the actual `internal` rate limiting behavior in action set `N
         if not isinstance(res, Exception):
             print(i+1, "- got real data")
         else:
-            # RiotRelatedRateLimitException(s) have an .enforcement_type attribute
+            # RiotRelatedRateLimitException(s) have an .enforcement_type attribute 
+            # with a str value of "internal" or "external"
             t = res.enforcement_type + "ly blocked"
             if "internal" in t:
                 custom_print(t, "yellow")
@@ -358,14 +361,14 @@ If you want to see the actual `internal` rate limiting behavior in action set `N
                 raise res # Some other exception is at play
 
 
-    print("BEHAVIOR EXAMPLE 1")
+    print("BEHAVIOR EXAMPLE")
     print("Type:", type(batch_results))
     print("Length:", len(batch_results))
     print("Type of first element", type(batch_results[0]))
     print("Time:", time.monotonic() - start_time)
 ```
 
-### Example 2a: Blocked by Riot (or a "leakage" scenario)
+### Example 2: Blocked by Riot (or a "leakage" scenario)
 ```sh
 # Real Production keys will have limits too high for this example to illustrate
 ND_RIOT_API_KEY="USE_A_DEVELOPMENT_OR_PERSONAL_KEY"
@@ -414,8 +417,8 @@ If you want to see the `external` rate limiting behavior use a Personal or Devel
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
     ]
 ```
-### Example 2b: Blocked by Riot first, then `New Destiny` while looping through baches
-With the same `.env` config as Example 2a:
+### Example 3: Blocked by Riot first, then `New Destiny` while looping through baches
+With the same `.env` config as Example 2:
 ```py
     start_time = time.monotonic()
     match_endpoints = [
@@ -539,7 +542,7 @@ With the same `.env` config as Example 2a:
                         raise res  # Some other exception is at play
 
 
-    print("BEHAVIOR EXAMPLE")
+    print("BEHAVIOR EXAMPLE 3")
     print("Type:", type(batch_results))
     print("Length:", len(batch_results))
     print("Type of first element", type(batch_results[0]))
