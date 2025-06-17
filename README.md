@@ -6,6 +6,7 @@
 - _You_ are responsible for protecting your environment variables. Do not expose your `ND_RIOT_API_KEY` to anyone not involved with your project, including Users and Github/source control.
 - Plays nice with and without Docker.
 - [GitHub](https://github.com/victorhaynes/new-destiny)
+- [PYPI](https://pypi.org/project/new-destiny/)
 
 # User Expectations
 - Basic willingness to respect the Riot API standards
@@ -63,6 +64,9 @@ ND_CUSTOM_MINUTES_WINDOW=180
 ```
 
 # Usage
+```sh
+pip install new-destiny
+```
 ```bash
 # your_project/.env
 # Step 1) setup your .env file, use this setting along with your other config
