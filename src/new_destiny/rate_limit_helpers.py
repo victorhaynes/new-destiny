@@ -632,64 +632,64 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
             }
         },
         {
-            "method": "/lol/league/v4/entries/by-summoner",
-            "pattern": r"^\/lol\/league\/v4\/entries\/by-summoner\/([^/]+)$",
+            "method": "/lol/league/v4/entries/by-puuid",
+            "pattern": r"^\/lol\/league\/v4\/entries\/by-puuid\/([^/]+)$",
             "routers": {
                 "na1": {
-                    "seconds": {"limit": 270, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "br1": {
-                    "seconds": {"limit": 100, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "la1": {
-                    "seconds": {"limit": 80, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "la2": {
-                    "seconds": {"limit": 80, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "euw1": {
-                    "seconds": {"limit": 300, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "eun1": {
-                    "seconds": {"limit": 165, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "tr1": {
-                    "seconds": {"limit": 60, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "ru": {
-                    "seconds": {"limit": 55, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "me1": {
-                    "seconds": {"limit": 300, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "jp1": {
-                    "seconds": {"limit": 55, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "kr": {
-                    "seconds": {"limit": 270, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "oc1": {
-                    "seconds": {"limit": 55, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "sg2": {
-                    "seconds": {"limit": 300, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "tw2": {
-                    "seconds": {"limit": 300, "window": 60}, 
-                    "minutes": {"limit": None, "window": None}
+                    "seconds": {"limit": 20000, "window": 10}, 
+                    "minutes": {"limit": 1200000, "window": 600}
                 },
                 "vn2": {
                     "seconds": {"limit": 300, "window": 60}, 

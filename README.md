@@ -12,7 +12,7 @@
 - Basic willingness to respect the Riot API standards
 - Basic python knowledge
 - Basic asynchronous programming understanding
-- Foundational understanding of Redis
+- Basic understanding of Redis (TLDR it is a key-value pair in-memory databse that supports TTLs)
 - Read Riot's documentation for their API ❗️ Then read it again❗️
 - If you have fundamental questions about how the API works you seek answers in the (un?)official Riot `Third Party Developer Community` discord.
 
