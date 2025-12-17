@@ -13,7 +13,7 @@ except KeyError:
     raise RuntimeError("Missing ND_REDIS_URL, please set it in your application's .env file or your environment.")
 
 try:
-    ND_REDIS_PORT = os.environ["ND_REDIS_PORT"]
+    ND_REDIS_PORT = int(os.environ["ND_REDIS_PORT"])
 except KeyError:
     raise RuntimeError("Missing ND_REDIS_PORT, please set it in your application's .env file or your environment.")
 

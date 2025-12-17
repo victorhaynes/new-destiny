@@ -16,7 +16,7 @@ from new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, Rio
 import ssl
 import httpx
 import certifi
-import redis
+import redis.asyncio
 import asyncio
 import time
 import pytest
@@ -104,7 +104,7 @@ async def test_walkthrough():
         # do with Riot, likely has nothing to do with New Destiny, and is likely your application code
         pass
 
-    # 7) Example Three: New Destiny with concurrency. Supress but gather any experienced errors.
+    # 8) Example Three: New Destiny with concurrency. Supress but gather any experienced errors.
     start_time = time.monotonic()
     async with httpx.AsyncClient(verify=ssl_context) as client:
         batch_results = await asyncio.gather(
@@ -130,7 +130,7 @@ async def test_walkthrough():
     print("Time:", time.monotonic() - start_time)
     print("Dead man walkin'.")
     
-    # 8) Example Four: Imagine you have a workflow that requires many requests to build something "whole".
+    # 9) Example Four: Imagine you have a workflow that requires many requests to build something "whole".
     # Imagine you want the match details of n = LAGE_NUBMER Faker matches.
     # For either resource or rate limit concerns you do not want to fire off n = LAGE_NUBMER requests concurrently.
     # You can use riot_request_with_retry() to automatically retry a request that gets rate limited (raises an exception of type RiotRelatedRateLimitException)

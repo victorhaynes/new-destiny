@@ -11,6 +11,7 @@ import httpx
 import certifi 
 import redis
 import asyncio
+import redis.asyncio
 import time # Not a requirement, just for logging purposes
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())

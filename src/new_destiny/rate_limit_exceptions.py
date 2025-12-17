@@ -2,6 +2,7 @@ import json
 import textwrap
 from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_method_config, derive_riot_service
+from typing import Optional, Any
 
 def format_offending_context(offending_context) -> str:
     """
@@ -40,11 +41,15 @@ class RiotRelatedException(Exception):
     pass
 
 class RiotRelatedRateLimitException(Exception):
-    pass
+    retry_after: int
+
+    def __init__(self, *, retry_after: int) -> None:
+        super().__init__()
+        self.retry_after = retry_after
 
 class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitException):
-    def __init__(self, retry_after: int, minutes_key: str, seconds_key: str, enforcement_type: str, subdomain: str, riot_endpoint: str, reason: str, seconds_limit= None, minutes_limit= None, seconds_count= None, seconds_window=None, minutes_count= None, minutes_window=None, offending_context=None):
-        self.retry_after = retry_after
+    def __init__(self, *, retry_after: int, minutes_key: str, seconds_key: str, enforcement_type: str, subdomain: str, riot_endpoint: str, reason: str, seconds_limit: int, minutes_limit: int, seconds_window: int, minutes_window: int, seconds_count: int | None = None, minutes_count: int | None = None, offending_context: Any | None = None) -> None:
+        super().__init__(retry_after=retry_after)
         self.seconds_key = seconds_key
         self.seconds_count = seconds_count # Only exists when internally enforced. This represents the current count of the seconds_key stored in redis.
         self.seconds_limit = seconds_limit
@@ -101,8 +106,8 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
 
 
 class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitException):
-    def __init__(self, retry_after: int, method: str, minutes_key: str, seconds_key: str, enforcement_type: str, subdomain: str, riot_endpoint:str, reason: str, seconds_limit= None, minutes_limit= None, seconds_count= None, seconds_window=None, minutes_count= None, minutes_window=None, offending_context=None):
-        self.retry_after = retry_after
+    def __init__(self, retry_after: int, method: str, minutes_key: Optional[str], seconds_key: Optional[str], enforcement_type: str, subdomain: str, riot_endpoint:str, reason: str, seconds_limit: int | None = None, minutes_limit: int | None = None, seconds_count: int | None = None, seconds_window: int | None = None, minutes_count: int | None = None, minutes_window: int | None =None, offending_context: Any | None =None):
+        super().__init__(retry_after=retry_after)
         self.method = method
         self.seconds_key = seconds_key
         self.seconds_count = seconds_count # Only exists when internally enforced. This represents the current count of the seconds_key stored in redis.
@@ -160,8 +165,8 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
 
 
 class ServiceRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitException):
-    def __init__(self, retry_after: int, service: str, enforcement_type: str, subdomain: str, riot_endpoint: str, offending_context=None):
-        self.retry_after = retry_after
+    def __init__(self, retry_after: int, service: str, enforcement_type: str, subdomain: str, riot_endpoint: str, offending_context: Any | None =None):
+        super().__init__(retry_after=retry_after)
         self.service = service
         self.enforcement_type = enforcement_type
         self.subdomain = subdomain
@@ -198,8 +203,8 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
     It is very uncommon but possible that Riot experience an API degredation and the type of 429 cannot be classified easily.
     In this case gather all information possible.
     """
-    def __init__(self, retry_after: int, subdomain: str, service: str, method: str, enforcement_type: str, riot_endpoint:str, offending_context=None):
-        self.retry_after = retry_after
+    def __init__(self, retry_after: int, subdomain: str, service: str, method: str, enforcement_type: str, riot_endpoint:str, offending_context: Any | None =None):
+        super().__init__(retry_after=retry_after)
         self.enforcement_type = enforcement_type
         self.subdomain = subdomain
         self.riot_endpoint = riot_endpoint
@@ -237,7 +242,7 @@ class RiotAPIError(RiotRelatedException):
     """
     500 series or non 429 status code errors received from Riot.
     """
-    def __init__(self, status_code: int, riot_endpoint:str, message: dict, offending_context=None):
+    def __init__(self, status_code: int, riot_endpoint:str, message: str | dict, offending_context: Any | None = None):
         self.status_code = status_code
         self.message = message
         self.subdomain = self.get_subdomain(riot_endpoint=riot_endpoint)

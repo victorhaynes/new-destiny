@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.5] - 2025-12-17
+### Changed
+- Improved type safety across exception classes
+- Added proper type hints across the package
+- Should now play nicer with Pylance/MyPy
+- Improved documentation
+
 ## [0.2.5] - 2025-06-17
 ### Changed
 - Update to methods supported per Riot's deprecation of endpoints (https://x.com/riotgamesdevrel/status/1932188110454235582)

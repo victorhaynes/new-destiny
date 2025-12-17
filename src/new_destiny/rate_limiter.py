@@ -2,6 +2,7 @@ from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_service, derive_riot_method_config
 from .rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, ND_CUSTOM_SECONDS_LIMIT, ND_CUSTOM_SECONDS_WINDOW, ND_PRODUCTION
+from typing import Any
 
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
@@ -34,22 +35,22 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         super().__init__(riot_endpoint, async_redis_client)
         if ND_PRODUCTION:
             # Limit / max count for the two types of rate limits
-            self.seconds_limit = ND_CUSTOM_SECONDS_LIMIT or 500
-            self.minutes_limit = ND_CUSTOM_MINUTES_LIMIT or 30000
+            self.seconds_limit: int = ND_CUSTOM_SECONDS_LIMIT or 500
+            self.minutes_limit: int = ND_CUSTOM_MINUTES_LIMIT or 30000
             # Validity windows in seconds for the two types of rate limits
-            self.seconds_window = ND_CUSTOM_SECONDS_WINDOW or 10
-            self.minutes_window = ND_CUSTOM_MINUTES_WINDOW or 600
+            self.seconds_window: int = ND_CUSTOM_SECONDS_WINDOW or 10
+            self.minutes_window: int = ND_CUSTOM_MINUTES_WINDOW or 600
         else:
             # Limit / max count for the two types of rate limits
-            self.seconds_limit = 20
-            self.minutes_limit = 100
+            self.seconds_limit: int = 20
+            self.minutes_limit:int = 100
             # Validity windows in seconds for the two types of rate limits
-            self.seconds_window = 1
-            self.minutes_window = 120
+            self.seconds_window: int = 1
+            self.minutes_window: int = 120
         # Redis keys that will identify what application rate limit we are checking
-        self.seconds_key = self.generate_key("seconds")
-        self.minutes_key = self.generate_key("minutes")
-        self.blocking_key = self.generate_blocking_key()
+        self.seconds_key: str = self.generate_key("seconds")
+        self.minutes_key: str = self.generate_key("minutes")
+        self.blocking_key: str = self.generate_blocking_key()
 
         # Initialize script content but don't load yet
         self.check_and_increment_script_content = self.get_check_and_increment_script()
@@ -206,7 +207,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         
         return True
 
-    async def write_inbound_application_rate_limit(self, retry_after: int, offending_context: list):
+    async def write_inbound_application_rate_limit(self, retry_after: int, offending_context: Any):
         """
         Set the application rate limit blocking key in Redis with a TTL.
         This is only for when we actually experience a 429 response with X-Rate-Limit-Type header
@@ -260,16 +261,16 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         self.config = derive_riot_method_config(riot_endpoint, self.subdomain, self.service)
 
         self.method = self.config["method"]
-        self.seconds_limit = self.config["seconds"]["limit"]
-        self.seconds_window = self.config["seconds"]["window"]
+        self.seconds_limit: int | None = self.config["seconds"]["limit"]
+        self.seconds_window: int | None = self.config["seconds"]["window"]
 
-        self.minutes_limit = self.config["minutes"]["limit"]
-        self.minutes_window = self.config["minutes"]["window"]
+        self.minutes_limit: int | None = self.config["minutes"]["limit"]
+        self.minutes_window: int | None = self.config["minutes"]["window"]
 
         # Generate Redis keys.
         self.seconds_key = self.generate_key("seconds") if self.seconds_limit is not None else None
         self.minutes_key = self.generate_key("minutes") if self.minutes_limit is not None else None
-        self.blocking_key = self.generate_blocking_key()
+        self.blocking_key: str = self.generate_blocking_key()
 
         # Initialize script content but don't load yet
         self.check_and_increment_script_content = self.get_check_and_increment_script()
@@ -451,7 +452,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         
         return True
     
-    async def write_inbound_method_rate_limit(self, retry_after: int, offending_context: list):
+    async def write_inbound_method_rate_limit(self, retry_after: int, offending_context: Any):
         """
         Set the method rate limit blocking key in Redis with a TTL. This is only for when we actually experience a
         429 response with X-Rate-Limit-Type header with a value of "method"
@@ -568,7 +569,7 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
             )
         return True
     
-    async def write_inbound_unspecified_rate_limit(self, retry_after: int, offending_context: list):
+    async def write_inbound_unspecified_rate_limit(self, retry_after: int, offending_context: Any):
         """
         Set the unspecified rate limit blocking key in Redis with a TTL. This is only for when we actually expereince a
         429 response with a missing X-Rate-Limit-Type header or unknown value. 

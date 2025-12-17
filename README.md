@@ -82,7 +82,7 @@ from new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, Rio
 import ssl
 import httpx
 import certifi
-import redis
+import redis.asyncio
 import asyncio
 import time # Not a requirement, just for logging purposes
 
@@ -237,11 +237,26 @@ from new_destiny.riot_get_request_with_retry import riot_request_with_retry
     # You can catch it with try/except. Other types of Exceptions will get raised/propagate immediately and do not get retried.
 
     # You can still use standard python/asyncio tools to control the level of concurrecy or batch size
-    # but this example simply demonstrates how this would work if you have a series requests that fire one at a time.
+    # but this example simply demonstrates how this would work if you have a series of requests that fire one at a time.
     # This function is useful if you have background jobs that interact with the Riot API.
     # This is not the "default" method because it is probably inappropriate to have potential UI users of your application experience retry times
     # if you do chose to expose a UI to users.
     fakers_matches = [
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658139863",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658058516",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658013757",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657049506",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656996570",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656945076",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656366075",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656081157",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656041838",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7656007612",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7655955675",
+        "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7655891458",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658139863",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658105279",

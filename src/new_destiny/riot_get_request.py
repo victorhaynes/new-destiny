@@ -3,9 +3,7 @@ from .rate_limit_exceptions import RiotAPIError
 import httpx
 from dotenv import load_dotenv
 from .utilities import custom_print
-import asyncio
-import json
-import os
+from typing import Union, Any
 from json import JSONDecodeError
 from .settings.config import ND_RIOT_API_KEY, ND_DEBUG
 load_dotenv()
@@ -14,7 +12,14 @@ riot_key = ND_RIOT_API_KEY
 debug = int(ND_DEBUG)
 auth_headers = {'X-Riot-Token': riot_key}
 
-async def perform_riot_request(riot_endpoint, client: httpx.AsyncClient, async_redis_client):
+async def perform_riot_request(riot_endpoint, client: httpx.AsyncClient, async_redis_client) -> Union[dict[str, Any], list[Any], None]:
+    """
+    Performs a GET request to the Riot API while respecting their rate limiting.
+    In the vast majority of cases you should expect this function to return valid JSON data in either a dict or list form.
+    In rare cases (See Status Code 204 case) this function may correctly return None.
+    In all other cases you will experience a RiotRelatedException--either a RiotAPIError due to a 4XX or 5XX response from Riot, 
+    or an exception from the RiotRelatedRateLimitException classes where a rate limit is hit and New Destiny caught it.
+    """
     # Instantiate the rate limiters
     application_rate_limiter = ApplicationRateLimiter(riot_endpoint, async_redis_client)
     method_rate_limiter = MethodRateLimiter(riot_endpoint, async_redis_client)
