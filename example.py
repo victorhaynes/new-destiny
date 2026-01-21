@@ -2,7 +2,7 @@
 from new_destiny.riot_get_request import perform_riot_request
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
 # from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl

@@ -1,0 +1,6 @@
+# Include all runtime dependencies
+-r requirements.txt
+
+# Add dev/testing dependencies
+pytest>=8.0.0
+pytest-asyncio>=1.0.0

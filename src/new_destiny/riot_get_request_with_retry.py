@@ -1,54 +1,123 @@
 from .utilities import custom_print
 from .riot_get_request import perform_riot_request
-from .rate_limit_exceptions import RiotRelatedRateLimitException, BatchJobStopSignal
+from .exceptions import RiotRelatedRateLimitException, RiotNetworkError
 import asyncio
 import httpx
+import random
+from .settings.config import ND_DEBUG
 
 """
 Note: the retry logic is currently only meant for background processes. 
-If a UI-triggered request gets 429'd I recommend using erorr handling that and no retry support. 
+If a UI-triggered request gets 429'd or the like I recommend error handling that and no retry support. 
 This is intentional, as users do not want to wait for a retry on top of the regular processing time.
 Background jobs can happily wait.
 """
 
 
-def retry_on_riot_timeout(default_attempts: int=3):
+def _exp_backoff_with_jitter(*, attempt: int, base: float = 1.0, cap: float = 20.0) -> float:
     """
-    Note: if we sleep the exact amount and retry instantly it is possible and likely Redis did not have time to expire the violated key. 
-    If that happens we will raise a Rate Limit style exception but with a 0 second retry_after time and that will instantly call Redis again with 0 second sleep and max out the attempts.
+    Calculate exponential backoff with full jitter.
+    
+    Args:
+        attempt: 1-based attempt number
+        base: Base delay in seconds
+        cap: Maximum delay in seconds
+    
+    Returns:
+        Random sleep time between 0 and the exponential backoff ceiling
+    """
+    ceiling = min(cap, base * (2 ** (attempt - 1)))
+    return random.uniform(0.0, ceiling)
+
+
+def retry_on_riot_rate_limited_or_network_error(default_attempts: int = 3):
+    """
+    Retry decorator for Riot API requests that handles:
+      - RiotRelatedRateLimitException: Sleep retry_after + 1 seconds then retry
+      - RiotNetworkError: Exponential backoff with jitter (transient network/infrastructure issues)
+      - All other exceptions (RiotAPIError): Raised immediately without retry
+    
+    Args:
+        default_attempts: Default number of retry attempts (can be overridden per-call with attempts kwarg)
+    
+    Note: 
+        Adds +1 second to retry_after for rate limits to ensure Redis has time to expire keys.
+        If we sleep the exact amount and retry instantly, Redis may not have expired the violated key yet,
+        causing a 0 second retry_after loop that exhausts attempts immediately.
     """
     def decorator(fn):
         async def wrapper(*args, **kwargs):
             total_attempts = kwargs.pop("attempts", default_attempts)
+            
             for attempt in range(1, total_attempts + 1):
                 try:
                     return await fn(*args, **kwargs)
+                
                 except RiotRelatedRateLimitException as exc:
                     if attempt < total_attempts:
-                        custom_print(
-                            f"Experienced {type(exc)} sleeping for {exc.retry_after} then retrying. Retry #{attempt}...",
-                            color="yellow",
-                        )
-                        custom_print(exc, color="yellow")
-                        await asyncio.sleep(int(exc.retry_after) + 1)
-                    else:
-                        # Last attempt, raise the exception directly
-                        raise
+                        sleep_s = int(exc.retry_after) + 1
+                        if ND_DEBUG:
+                            custom_print(
+                                f"[Riot RL] {exc.__class__.__name__}, enforcement_type={exc.enforcement_type} "
+                                f"retry_after={exc.retry_after} sleep={sleep_s}s attempt={attempt}/{total_attempts}",
+                                color="yellow",
+                            )
+                        await asyncio.sleep(sleep_s)
+                        continue
+                    raise
+                
+                except RiotNetworkError as exc:
+                    if attempt < total_attempts:
+                        sleep_s = _exp_backoff_with_jitter(attempt=attempt, base=1.0, cap=20.0)
+                        if ND_DEBUG:
+                            custom_print(
+                                f"[Network] {exc.error_type}: {exc.message} "
+                                f"sleep={sleep_s:.2f}s attempt={attempt}/{total_attempts}",
+                                color="yellow",
+                            )
+                        await asyncio.sleep(sleep_s)
+                        continue
+                    raise
+        
         return wrapper
     return decorator
 
-@retry_on_riot_timeout()
+
+@retry_on_riot_rate_limited_or_network_error(default_attempts=3)
 async def riot_request_with_retry(*, riot_endpoint: str, client: httpx.AsyncClient, async_redis_client, **kwargs):
     """
-    Call this function like perform_riot_request() but include an "attempts" integer argument.
-    **kwargs is used so type checkers do not complain about "attempts" being passed in.
-    This function's decorator will set a default number of attempts if it is not provided
+    Performs a Riot API request with automatic retry logic for transient failures.
+    
+    Retries on:
+      - RiotRelatedRateLimitException: Sleeps retry_after + 1 seconds, then retries
+      - RiotNetworkError: Uses exponential backoff with jitter (handles timeouts, connection errors, 
+        gateway errors 502/503/504, Cloudflare 52X errors)
+    
+    Does NOT retry on:
+      - RiotAPIError: Real API errors (4XX client errors, 500 server errors) - these indicate issues 
+        with the request or Riot's API state that won't be fixed by retrying
+      - Other exceptions: Unknown errors that should bubble up
+    
+    Args:
+        riot_endpoint: Full Riot API endpoint URL
+        client: httpx AsyncClient instance
+        async_redis_client: Redis client for rate limiting
+        attempts: Optional override for number of retry attempts (default: 3)
+    
+    Returns:
+        dict, list, or None depending on the endpoint response
+    
+    Raises:
+        RiotRelatedRateLimitException: After exhausting retry attempts on rate limits
+        RiotNetworkError: After exhausting retry attempts on network errors
+        RiotAPIError: Immediately without retry (real API errors)
+
+    Note:
+        **kwargs is used so type checkers don't complain about "attempts" being passed in.
+        The decorator will pop the "attempts" kwarg and use it for retry logic.
     """
-    try:
-        return await perform_riot_request(riot_endpoint=riot_endpoint, client=client, async_redis_client=async_redis_client)
-    except Exception as exc:
-        if isinstance(exc, RiotRelatedRateLimitException):
-            # this means it is RiotRelatedException or more specifically in (ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded)
-            # raise it for retry in the decorator
-            raise 
-        raise # RiotApiError, BatchJobStopSignal, or other general non-custom exception will just get raised and returned to the caller
+    return await perform_riot_request(
+        riot_endpoint=riot_endpoint, 
+        client=client, 
+        async_redis_client=async_redis_client
+    )

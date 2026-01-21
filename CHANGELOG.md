@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.5] - 2025-12-17
+## [0.2.8] - 2026-01-21
+### Changed
+- Changelog versioning & dates correction
+- pyproject.toml explicitly upadted to exclude files. Not strictly necessary but more safe.
+
+## [0.2.7] - 2026-01-21
+### Changed
+- Improved typing
+- Made core fields available for type-checkers on the RiotRelatedRateLimitException class
+- Added new RiotNetworkError class so transient network issues do not get raised as RiotAPIError(s). These are semantically different
+- Updated retry logic to work for both rate limit exceptions and RiotNetworkError(s)
+- Made depdenencies less strict, more compatible
+
+## [0.2.6] - 2025-12-17
 ### Changed
 - Improved type safety across exception classes
 - Added proper type hints across the package

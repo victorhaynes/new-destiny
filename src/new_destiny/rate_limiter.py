@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_service, derive_riot_method_config
-from .rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
+from .exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, ND_CUSTOM_SECONDS_LIMIT, ND_CUSTOM_SECONDS_WINDOW, ND_PRODUCTION
 from typing import Any
 

@@ -1,8 +1,8 @@
-# your_project/example.py
+# run this locally with python tester.py -- set ND_DEBUG=1 if desired
 from src.new_destiny.riot_get_request import perform_riot_request
 from src.new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from src.new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from src.new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+from src.new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
 from src.new_destiny.utilities import custom_print
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
 # from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
