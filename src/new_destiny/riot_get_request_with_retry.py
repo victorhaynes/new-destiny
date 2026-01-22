@@ -75,8 +75,8 @@ def retry_on_riot_rate_limited_or_network_error(
                 raise ValueError("network_tolerance must be >= 1")
 
             # Track budgets separately (not just "attempt number")
-            rl_tries_used = 0
-            net_tries_used = 0
+            rl_failures_seen = 0
+            net_failures_seen = 0
 
             # Note: This loop is not bounded by a single total attempt count
             # It will terminate when an exception type exhausts its own budget,
@@ -86,9 +86,9 @@ def retry_on_riot_rate_limited_or_network_error(
                     return await fn(*args, **kwargs)
 
                 except RiotRelatedRateLimitException as exc:
-                    rl_tries_used += 1
+                    rl_failures_seen += 1
 
-                    if rl_tries_used >= attempts:
+                    if rl_failures_seen >= attempts:
                         # Exhausted RL budget
                         raise
 
@@ -97,24 +97,25 @@ def retry_on_riot_rate_limited_or_network_error(
                         custom_print(
                             f"[Riot RL] {exc.__class__.__name__}, enforcement_type={exc.enforcement_type} "
                             f"retry_after={exc.retry_after} sleep={sleep_s}s "
-                            f"attempt={rl_tries_used}/{attempts} (RL budget)",
+                            f"rate_limit_failures_seen={rl_failures_seen} max_rate_limit_failures={attempts}",
                             color="yellow",
                         )
                     await asyncio.sleep(sleep_s)
                     continue
 
                 except RiotNetworkError as exc:
-                    net_tries_used += 1
+                    net_failures_seen += 1
 
-                    if net_tries_used >= network_tolerance:
+                    if net_failures_seen >= network_tolerance:
                         # Exhausted network budget
                         raise
 
-                    sleep_s = _exp_backoff_with_jitter(attempt=net_tries_used, base=1.0, cap=20.0)
+                    sleep_s = _exp_backoff_with_jitter(attempt=net_failures_seen, base=1.0, cap=20.0)
                     if ND_DEBUG:
                         custom_print(
                             f"[Network] {exc.error_type}: {exc.message} "
-                            f"sleep={sleep_s:.2f}s attempt={net_tries_used}/{network_tolerance} (NET budget)",
+                            f"sleep={sleep_s:.2f}s "
+                            f"network_failures_seen={net_failures_seen} max_network_failures={network_tolerance}",
                             color="yellow",
                         )
                     await asyncio.sleep(sleep_s)

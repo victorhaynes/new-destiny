@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [0.3.0] - 2026-01-22
+### Changed
+- The optional logging/output for the "attempts" and "network_tolerance" kwargs for `riot_request_with_retry`function is now more clear and has better wording.
+
 ## [0.2.9] - 2026-01-21
 ### Changed
 - New "attempts" and "network_tolerance" kwargs available on `riot_request_with_retry` function
