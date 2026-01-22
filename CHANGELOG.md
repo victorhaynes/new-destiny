@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.9] - 2026-01-21
+### Changed
+- New "attempts" and "network_tolerance" kwargs available on `riot_request_with_retry` function
+- Can now tolerate, sleep, and retry up to n-1 rate limit related errors or m-1 network related errors on-demand for an indvidual request. Totally optional to include. Separate tolerances/budgets for these two types of issues.
+
 ## [0.2.8] - 2026-01-21
 ### Changed
 - Changelog versioning & dates correction

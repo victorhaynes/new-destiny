@@ -23,7 +23,7 @@ async def perform_riot_request(
     In rare cases (See Status Code 204 case) this function may correctly return None.
     In all other cases you will experience a RiotRelatedException--either a RiotAPIError due to a 4XX or 5XX response from Riot, 
     or an exception from the RiotRelatedRateLimitException classes where a rate limit is hit and New Destiny caught it.
-    Note that some 5XX errors are transient network related issues. You may want to catch httpx.HTTPError (catch all),
+    Note that some 5XX errors are transient network related issues. You may want to catch httpx.RequestError (catch all),
     httpx.ConnectionError, or httpx.TimeoutException errors in your application. These will buble up.
     """
     # Instantiate the rate limiters
@@ -39,7 +39,7 @@ async def perform_riot_request(
     await unspecified_rate_limiter.is_allowed()
     if debug: custom_print("rate limiter checks passed", color="black")
 
-    # Perform the GET request
+    # Perform the GET request with network error handling
     try:
         if debug: custom_print(riot_endpoint, color="black")
         response = await client.get(riot_endpoint, headers=auth_headers)
@@ -57,11 +57,11 @@ async def perform_riot_request(
             riot_endpoint=riot_endpoint,
             original_exception=e
         )
-    except httpx.HTTPError as e:
-        # Catch-all for other httpx errors (DNS, SSL, etc.)
+    except httpx.RequestError as e:
+        # Catches all request-level errors (DNS, SSL, etc.) but NOT status code errors
         raise RiotNetworkError(
-            error_type="http_error",
-            message=f"HTTP error occurred: {str(e)}",
+            error_type="request_error",
+            message=f"Request error occurred: {str(e)}",
             riot_endpoint=riot_endpoint,
             original_exception=e
         )
