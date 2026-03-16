@@ -1,22 +1,28 @@
 from .rate_limiter import ApplicationRateLimiter, MethodRateLimiter, ServiceRateLimiter, UnspecifiedRiotRateLimiter
 from .exceptions import RiotAPIError, RiotNetworkError
+from .json_types import JSONValue, RiotResponse
 import httpx
 from dotenv import load_dotenv
 from .utilities import custom_print
-from typing import Union, Any
+from typing import Any, cast
 from json import JSONDecodeError
 from .settings.config import ND_RIOT_API_KEY, ND_DEBUG
 load_dotenv()
 
 riot_key = ND_RIOT_API_KEY
 debug = int(ND_DEBUG)
-auth_headers = {'X-Riot-Token': riot_key}
+auth_headers: dict[str, str] = {"X-Riot-Token": riot_key}
+
+
+def _parse_json_value(response: httpx.Response) -> JSONValue:
+    """Cast the JSON boundary returned by httpx into the library's JSON type."""
+    return cast(JSONValue, response.json())
 
 async def perform_riot_request(
     riot_endpoint: str, 
     client: httpx.AsyncClient, 
-    async_redis_client
-) -> Union[dict[str, Any], list[Any], None]:
+    async_redis_client: Any,
+) -> RiotResponse:
     """
     Performs a GET request to the Riot API while respecting their rate limiting.
     In the vast majority of cases you should expect this function to return valid JSON data in either a dict or list form.
@@ -69,7 +75,7 @@ async def perform_riot_request(
     
     # 200 OK
     if status == 200:
-        body = response.json()
+        body = cast(RiotResponse, _parse_json_value(response))
         return body
 
     elif status == 204: # No Content - this happens mostly when LEAGUE-EXP-V4 Apex tiers are empty in the early season
@@ -84,7 +90,7 @@ async def perform_riot_request(
     # Rate limited by Riot
     elif status == 429:
         headers = dict(response.headers)
-        body = response.json()
+        body = _parse_json_value(response)
         retry_after = int(headers.get("retry-after", 68)) + 1
         rate_limit_type = headers.get("x-rate-limit-type", None)
         if debug: 
@@ -152,7 +158,7 @@ async def perform_riot_request(
             custom_print(riot_endpoint, color="red")
             custom_print(response, color="red")
         try:
-            body = response.json()
+            body = _parse_json_value(response)
             raise RiotAPIError(
                 status_code=status,
                 message=body,

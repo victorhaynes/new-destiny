@@ -10,14 +10,14 @@
 
 # User Expectations
 - Basic willingness to respect the Riot API standards
-- Basic python knowledge
+- Basic Python knowledge
 - Basic asynchronous programming understanding
-- Basic understanding of Redis (TLDR it is a key-value pair in-memory databse that supports TTLs)
+- Basic understanding of Redis (TLDR it is a key-value pair in-memory database that supports TTLs)
 - Read Riot's documentation for their API ❗️ Then read it again❗️
 - If you have fundamental questions about how the API works you seek answers in the (un?)official Riot `Third Party Developer Community` discord.
 
 # Simple Configuration
-`New Destinity` requires environment variables to function. It also requires access to a Redis instance:
+`New Destiny` requires environment variables to function. It also requires access to a Redis instance:
 - `ND_RIOT_API_KEY` takes a string value: enter your Riot-issued API key. If using a development key be sure to keep it updated.
 - `ND_PRODUCTION` takes an integer value 0 or 1: specify whether or not you are using a **Production API Key**. As you know from the Riot API Docs your **Application Rate Limit** differs depending on what kind of key you have:
     - `ND_PRODUCTION=0`: Development & Personal API Keys:
@@ -32,7 +32,7 @@
 - `ND_REDIS_URL` takes a string value: enter the address your `Redis` instance is running on.
 Can be an actual address, "localhost", or "service_name" if your application code & `Redis` are in the same Docker compose stack.
 - `ND_REDIS_PORT` takes an integer value: enter the port number `Redis` is listening to.
-- `ND_DEBUG` takes an integer value 0 or 1: decide if you want the rate limiter to log what it is attempting to do/experiencing. Very useful if you are experiencing unexpected behavior in your application code or from the Riot API (which does happen). Highly recommend you set this to 1 until you are comfortable with your code and mine. Note debug mode is safe to use in an production environment. It **will** expose to whoever has access to your server logs: things like player PUUIDs (which are encrypted and have basically no malintent usecase), response headers, resesponse bodies, show what URL is being tried, along with the current state of your rate limiter(s). But `New Destiny` will **not** expose your API key.
+- `ND_DEBUG` takes an integer value 0 or 1: decide if you want the rate limiter to log what it is attempting to do/experiencing. Very useful if you are experiencing unexpected behavior in your application code or from the Riot API (which does happen). Highly recommend you set this to 1 until you are comfortable with your code and mine. Note debug mode is safe to use in a production environment. It **will** expose to whoever has access to your server logs: things like player PUUIDs (which are encrypted and have basically no malintent use case), response headers, response bodies, show what URL is being tried, along with the current state of your rate limiter(s). But `New Destiny` will **not** expose your API key.
 
 ## Example Configuration
 Use an `.env` file to declare these values:
@@ -75,10 +75,11 @@ ND_DEBUG=1
 ```py
 # your_project/example.py
 from new_destiny.riot_get_request import perform_riot_request
+from new_destiny.json_types import expect_object, expect_string
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from new_destiny.rate_limit_exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
-# from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
+# from new_destiny.exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
 import httpx
 import certifi
@@ -115,19 +116,25 @@ async def main():
             client=client,
             async_redis_client=async_redis_client
         )
+
+    if account_details is None:
+        raise ValueError("Expected account details but Riot returned no content.")
+    account_payload = expect_object(account_details)
+    puuid = expect_string(account_payload["puuid"])
     
     """
     Do whatever you want with the response
     """
     print("EXAMPLE 1")
     print("Type:", type(account_details))
+    print("PUUID:", puuid)
     print("Response:", account_details)
     print("Time:", time.monotonic() - start_time)
     print("Feelin' lucky?")
 
     """
     EXAMPLE 2: New Destiny with concurrency.
-    Raise first exception (which include RiotRelatedRateLimitException(s)) if any encoutnered.
+    Raise first exception (which include RiotRelatedRateLimitException(s)) if any encountered.
     """
     try:
         match_endpoints = [
@@ -164,7 +171,7 @@ async def main():
         # Important!
         # You can also specifically catch: ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
         # These also fall under type RiotRelatedException
-        # See: Q&A Design philosphy 'Respect' section for more.
+        # See: Q&A Design philosophy 'Respect' section for more.
         print(exc)
         print(exc.retry_after)
         pass
@@ -174,7 +181,7 @@ async def main():
         pass
     except RiotRelatedException as exc:
         # Use this if you want a catch-all for any Riot API related exception.
-        # This just the union of RiotRelatedRateLimitException and RiotAPIError
+        # This is just the union of RiotRelatedRateLimitException and RiotAPIError
         pass
     except Exception as exc:
         # If 'exc' exception is not of type RiotRelatedException it has nothing to
@@ -183,7 +190,7 @@ async def main():
 
     """
     EXAMPLE 3: New Destiny with concurrency.
-    Supress but gather any experienced errors.
+    Suppress but gather any experienced errors.
     """
     start_time = time.monotonic()
     async with httpx.AsyncClient(verify=ssl_context) as client:
@@ -228,19 +235,19 @@ from new_destiny.riot_get_request_with_retry import riot_request_with_retry
     """
     EXAMPLE 4: Imagine you have a workflow that requires many requests to build something "whole".
     """
-    # Imagine you want the match details for n = LAGE_NUBMER of T1 Faker's matches.
-    # For either resource or rate limit concerns you do not want to fire off n = LAGE_NUBMER requests concurrently.
+    # Imagine you want the match details for n = LARGE_NUMBER of T1 Faker's matches.
+    # For either resource or rate limit concerns you do not want to fire off n = LARGE_NUMBER requests concurrently.
     # You can use riot_request_with_retry() to automatically retry a request that gets rate limited 
     # (raises an exception of type RiotRelatedRateLimitException)
     # up to a total number of attempts (default is 3). This protects your workflow against rate limit exceptions.
-    # If a request gets rate limited more than the # of attempts specified the exception will propogate to the context of the caller like normal. 
+    # If a request gets rate limited more than the # of attempts specified the exception will propagate to the context of the caller like normal. 
     # You can catch it with try/except. Other types of Exceptions will get raised/propagate immediately and do not get retried.
 
-    # You can still use standard python/asyncio tools to control the level of concurrecy or batch size
+    # You can still use standard python/asyncio tools to control the level of concurrency or batch size
     # but this example simply demonstrates how this would work if you have a series of requests that fire one at a time.
     # This function is useful if you have background jobs that interact with the Riot API.
     # This is not the "default" method because it is probably inappropriate to have potential UI users of your application experience retry times
-    # if you do chose to expose a UI to users.
+    # if you do choose to expose a UI to users.
     fakers_matches = [
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658139863",
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
@@ -300,6 +307,14 @@ if __name__ == "__main__":
 # To run this code:
 python example.py
 ```
+
+`perform_riot_request()` and `riot_request_with_retry()` return a schema-agnostic `RiotResponse` type:
+- `dict[str, JSONValue]`
+- `list[JSONValue]`
+- `None`
+
+If you want typing help without tying the package to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_object()`, `expect_array()`, `expect_string()`, `expect_int()`, etc.
+
 ```sh
 # To examine what is going on inside Redis, first open the Redis CLI where your Redis server is running:
 redis-cli
@@ -318,7 +333,7 @@ ND_PRODUCTION=0
 Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosophy" for more.
 
 ### Important:
-`New Destiny` works best when you configure it to use your actual `Application Rate Limit` values. Just because you can override it does not mean you should. The examples below will illuminte why.
+`New Destiny` works best when you configure it to use your actual `Application Rate Limit` values. Just because you can override it does not mean you should. The examples below will illuminate why.
 
  This package also works best when you size your concurrent request batches appropriately relative to the size of your rate limits. If you know you're limited to 10/s or 500/10s don't spawn 1000 concurrent requests. `New Destiny` protects almost flawlessly for **synchronous** (one at a time) requests. However edge cases exist where you can experience multiple inbound `429`s during a batch of **concurrent** requests. The larger your batch size is relative to your limits the greater chance there is for this. If you have N total items split into M batches you can experience multiple inbound `429`s within a batch and this is not ideal, but you will **not** experience more `429s` after the first batch than ran into them.
 
@@ -436,7 +451,7 @@ If you want to see the `external` rate limiting behavior use a Personal or Devel
         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7657080042",
     ]
 ```
-### Example 3: Blocked by Riot first, then `New Destiny` while looping through baches
+### Example 3: Blocked by Riot first, then `New Destiny` while looping through batches
 With the same `.env` config as Example 2:
 ```py
     start_time = time.monotonic()
@@ -567,7 +582,7 @@ With the same `.env` config as Example 2:
     print("Type of first element", type(batch_results[0]))
     print("Time:", time.monotonic() - start_time)
 ```
-If you are looping through a list of items in batches one batch may experierence multiple `429`s but subsequent batches will get blocked internally. **Some amount of leakage is natural** as my counters and TTLs are not perfectly in sync with Riot. But through standard configuration and sensible usage this is not much of a problem. My own 3rd party application is running `New Destiny` with automated background jobs and it is in good standing. The vast majority of rate limit exceptions I experience are internally enforced.
+If you are looping through a list of items in batches one batch may experience multiple `429`s but subsequent batches will get blocked internally. **Some amount of leakage is natural** as my counters and TTLs are not perfectly in sync with Riot. But through standard configuration and sensible usage this is not much of a problem. My own 3rd party application is running `New Destiny` with automated background jobs and it is in good standing. The vast majority of rate limit exceptions I experience are internally enforced.
 
 # Question & Answer
 
@@ -583,7 +598,7 @@ All of them other than China. Riot does not allow us to interact with Chinese da
 
 ## What services and methods are supported?
 In my opinion, most of the important methods.  
-All methods for `League-V4`, `League-EXP-V4`, `Match-V5`, and `Champion-Mastery-V4`.
+All methods for `League-V4`, `League-EXP-V4`, `Champion-V3`, `Clash-V1`, `Lol-Challenges-V1`, `Lol-Status-V4`, `Spectator-V5`, `Match-V5`, and `Champion-Mastery-V4`.
 
 `Summoner-V4`:
 Everything except /fulfillment/v1/summoners/by-puuid/{rsoPUUID}
@@ -594,6 +609,7 @@ If there is high demand I may prioritize this.
 - /riot/account/v1/accounts/by-riot-id
 - /riot/account/v1/accounts/by-puuid
 - /riot/account/v1/active-shards/by-game
+- /riot/account/v1/region/by-game
 
 If you want more methods or LoL-related services supported,
 feel free to request them and I'll do my best to add them or open a pull request.
@@ -640,7 +656,7 @@ If `Redis` crashes, you delete the keys, or you restart it etc. the worst case s
 version of your request count vs the allotted limit for a given time span. Limits are typically only applied to up to 10 minute windows so they do reset naturally.
 See next answer.
 
-## What is the design philosphy of `New Destiny`?
+## What is the design philosophy of `New Destiny`?
 `Respect`, `interpretability`, and `unopinionated`
 
 On `respect`:

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-03-16
+### Changed
+- File clean up.
+
+## [0.3.2] - 2026-03-16
+### Changed
+- Folder cean up.
+
+## [0.3.1] - 2026-03-16
+### Changed
+- Expanded the LoL rate limit map to cover `CHAMPION-V3`, `CLASH-V1`, `LOL-STATUS-V4`, `LOL-CHALLENGES-V1`, `SPECTATOR-V5`, `ACCOUNT-V1 /region/by-game`, and `MATCH-V5 /matches/by-puuid/{puuid}/replays`
+- Fixed the `ACCOUNT-V1 active-shards` regex to match Riot's actual `/by-puuid/` path shape
+- Added focused matcher coverage for the newly supported endpoint patterns
 
 ## [0.3.0] - 2026-01-22
 ### Changed
@@ -69,4 +82,3 @@ All notable changes to this project will be documented in this file.
 ## [0.1.0] - 2024-06-07
 ### Added
 - Initial release
-

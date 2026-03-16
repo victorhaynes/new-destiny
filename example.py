@@ -1,10 +1,11 @@
 # your_project/example.py
+from new_destiny.json_types import expect_object, expect_string
 from new_destiny.riot_get_request import perform_riot_request
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
 from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
-# from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
+# from new_destiny.exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
 import httpx
 import certifi 
@@ -39,10 +40,15 @@ async def main():
     #         client=client,
     #         async_redis_client=async_redis_client
     #     )
+    #     if account_details is None:
+    #         raise ValueError("Expected account details but Riot returned no content.")
+    #     account_payload = expect_object(account_details)
+    #     puuid = expect_string(account_payload["puuid"])
     
     # # 6) Do whatever you want with the response
     # print("EXAMPLE 1")
     # print("Type:", type(account_details))
+    # print("PUUID:", puuid)
     # print("Response: ",account_details)
     # print("Time:", time.monotonic() - start_time)
     # print("Feelin' lucky?")

@@ -1,15 +1,13 @@
 # run this locally with python tester.py -- set ND_DEBUG=1 if desired
+from src.new_destiny.json_types import expect_object, expect_string
 from src.new_destiny.riot_get_request import perform_riot_request
-from src.new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from src.new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from src.new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
 from src.new_destiny.utilities import custom_print
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
-# from new_destiny.rate_limit_exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
+# from new_destiny.exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
 import httpx
 import certifi 
-import redis
 import asyncio
 import redis.asyncio
 import time # Not a requirement, just for logging purposes
@@ -20,6 +18,22 @@ async_redis_client = redis.asyncio.Redis(host=ND_REDIS_URL, port=ND_REDIS_PORT, 
 async def main():
     # Example application code:
     # do_some_work() ...
+
+    async with httpx.AsyncClient(verify=ssl_context) as client:
+        region = "asia"
+        gamename = "hide on bush"
+        tagline = "KR1"
+        account_endpoint = f"https://{region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gamename}/{tagline}"
+        account_details = await perform_riot_request(
+            riot_endpoint=account_endpoint,
+            client=client,
+            async_redis_client=async_redis_client,
+        )
+
+    if account_details is None:
+        raise ValueError("Expected account details but Riot returned no content.")
+    account_payload = expect_object(account_details)
+    print("Example PUUID:", expect_string(account_payload["puuid"]))
 
     start_time = time.monotonic()
     match_endpoints = [

@@ -3,10 +3,12 @@ from __future__ import annotations
 from .utilities import custom_print
 from .riot_get_request import perform_riot_request
 from .exceptions import RiotRelatedRateLimitException, RiotNetworkError
+from .json_types import RiotResponse
 import asyncio
 import httpx
 import random
 from functools import wraps
+from typing import Any, Awaitable, Callable, Mapping, ParamSpec, TypeVar, cast
 from .settings.config import ND_DEBUG
 
 """
@@ -15,6 +17,9 @@ If a UI-triggered request gets 429'd or the like I recommend error handling that
 This is intentional, as users do not want to wait for a retry on top of the regular processing time.
 Background jobs can happily wait.
 """
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def _exp_backoff_with_jitter(*, attempt: int, base: float = 1.0, cap: float = 20.0) -> float:
@@ -37,7 +42,7 @@ def retry_on_riot_rate_limited_or_network_error(
     *,
     default_rate_limit_attempts: int = 3,
     default_network_attempts: int = 5,
-):
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Retry decorator for Riot API requests that handles:
       - RiotRelatedRateLimitException: Sleep retry_after + 1 seconds then retry
@@ -62,12 +67,26 @@ def retry_on_riot_rate_limited_or_network_error(
     if default_network_attempts < 1:
         raise ValueError("default_network_attempts must be >= 1. If you do not want retries do not use this function.")
 
-    def decorator(fn):
+    def decorator(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @wraps(fn)
-        async def wrapper(*args, **kwargs):
-            # Allow per-call overrides without type checkers complaining
-            attempts = int(kwargs.pop("attempts", default_rate_limit_attempts))
-            network_tolerance = int(kwargs.pop("network_tolerance", default_network_attempts))
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            kwarg_mapping = cast(Mapping[str, object], kwargs)
+            raw_attempts = kwarg_mapping.get("attempts")
+            raw_network_tolerance = kwarg_mapping.get("network_tolerance")
+
+            if raw_attempts is None:
+                attempts = default_rate_limit_attempts
+            elif isinstance(raw_attempts, bool) or not isinstance(raw_attempts, int):
+                raise TypeError("attempts must be an int or None")
+            else:
+                attempts = raw_attempts
+
+            if raw_network_tolerance is None:
+                network_tolerance = default_network_attempts
+            elif isinstance(raw_network_tolerance, bool) or not isinstance(raw_network_tolerance, int):
+                raise TypeError("network_tolerance must be an int or None")
+            else:
+                network_tolerance = raw_network_tolerance
 
             if attempts < 1:
                 raise ValueError("attempts must be >= 1")
@@ -134,13 +153,14 @@ async def riot_request_with_retry(
     *,
     riot_endpoint: str,
     client: httpx.AsyncClient,
-    async_redis_client,
-    **kwargs,
-):
+    async_redis_client: Any,
+    attempts: int | None = None,
+    network_tolerance: int | None = None,
+) -> RiotResponse:
     """
     Performs a Riot API request with automatic retry logic for rate limit failures and transient network failures.
 
-    Optional per-call overrides (kwarg):
+    Optional per-call overrides:
       - attempts: int
             Default 3
             How many total times should New Destiny attempt an individual request with respects to inbound rate limits. 
@@ -162,9 +182,10 @@ async def riot_request_with_retry(
       - Other exceptions: Unknown errors that should bubble up
 
     Note:
-        **kwargs exists so type checkers don't complain when passing retry override kwargs.
-        The decorator will pop these kwargs and will not forward them to perform_riot_request.
+        "attempts" and "network_tolerance" exist on this function's signature for caller ergonomics and type safety.
+        This function itself does not use them directly. The decorator reads them and perform_riot_request never sees them.
     """
+    _ = attempts, network_tolerance
     return await perform_riot_request(
         riot_endpoint=riot_endpoint,
         client=client,

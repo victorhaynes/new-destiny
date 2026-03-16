@@ -16,16 +16,26 @@ def derive_riot_service(riot_endpoint: str) -> str:
     
     if "/lol/summoner/v4" in path or "/fulfillment/v1" in path:
         return "SUMMONER-V4"
+    elif "/lol/platform/v3" in path:
+        return "CHAMPION-V3"
     elif '/lol/league/v4' in path:
         return "LEAGUE-V4"
     elif "/lol/league-exp/v4" in path:
         return 'LEAGUE-EXP-V4'
+    elif "/lol/clash/v1" in path:
+        return "CLASH-V1"
     elif "/riot/account/v1" in path:
         return "ACCOUNT-V1"
     elif "/lol/match/v5/" in path:
         return "MATCH-V5"
+    elif "/lol/status/v4" in path:
+        return "LOL-STATUS-V4"
+    elif "/lol/challenges/v1" in path:
+        return "LOL-CHALLENGES-V1"
     elif "lol/champion-mastery/v4" in path:
         return "CHAMPION-MASTERY-V4"
+    elif "/lol/spectator/v5" in path:
+        return "SPECTATOR-V5"
     else:
         raise TypeError("No appropriate Riot Service could be determined.")
 
@@ -86,6 +96,31 @@ def derive_riot_method_config(
             }
 
     raise ValueError(f"No matching method for URL: {path} in service: {service}")
+
+
+LOL_PLATFORM_ROUTERS = (
+    "na1", "br1", "la1", "la2", "euw1", "eun1", "tr1", "ru",
+    "me1", "jp1", "kr", "oc1", "sg2", "tw2", "vn2",
+)
+LOL_REGIONAL_ROUTERS = ("americas", "asia", "europe")
+LOL_MATCH_ROUTERS = LOL_REGIONAL_ROUTERS + ("sea",)
+
+
+def build_router_limits(
+    routers,
+    *,
+    seconds_limit: int,
+    seconds_window: int,
+    minutes_limit: int | None = None,
+    minutes_window: int | None = None
+) -> dict:
+    return {
+        router: {
+            "seconds": {"limit": seconds_limit, "window": seconds_window},
+            "minutes": {"limit": minutes_limit, "window": minutes_window},
+        }
+        for router in routers
+    }
 
 
 
@@ -364,6 +399,19 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
                     "minutes": {"limit": 1200000, "window": 600}
                 },
             }
+        },
+    ],
+    "CHAMPION-V3": [
+        {
+            "method": "/lol/platform/v3/champion-rotations",
+            "pattern": r"^\/lol\/platform\/v3\/champion-rotations$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=30,
+                seconds_window=10,
+                minutes_limit=500,
+                minutes_window=600,
+            ),
         },
     ],
     "LEAGUE-V4": [
@@ -832,6 +880,55 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
             }
         },
     ],
+    "CLASH-V1": [
+        {
+            "method": "/lol/clash/v1/teams",
+            "pattern": r"^\/lol\/clash\/v1\/teams\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=200,
+                seconds_window=60,
+            ),
+        },
+        {
+            "method": "/lol/clash/v1/tournaments",
+            "pattern": r"^\/lol\/clash\/v1\/tournaments\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=10,
+                seconds_window=60,
+            ),
+        },
+        {
+            "method": "/lol/clash/v1/tournaments/by-team",
+            "pattern": r"^\/lol\/clash\/v1\/tournaments\/by-team\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=200,
+                seconds_window=60,
+            ),
+        },
+        {
+            "method": "/lol/clash/v1/tournaments",
+            "pattern": r"^\/lol\/clash\/v1\/tournaments$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=10,
+                seconds_window=60,
+            ),
+        },
+        {
+            "method": "/lol/clash/v1/players/by-puuid",
+            "pattern": r"^\/lol\/clash\/v1\/players\/by-puuid\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+    ],
     "ACCOUNT-V1": [ # Note SEA is not a region/router option for ACCOUNT-V1
         {
             "method": "/riot/account/v1/accounts/by-riot-id",
@@ -871,21 +968,25 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
         },
         {
             "method": "/riot/account/v1/active-shards/by-game",
-            "pattern": r"^\/riot\/account\/v1\/active-shards\/by-game\/([^/]+)\/([^/]+)$",
-            "routers": {
-                "americas": {
-                    "seconds": {"limit": 20000, "window": 10}, 
-                    "minutes": {"limit": 1200000, "window": 600}
-                },
-                "asia": {
-                    "seconds": {"limit": 20000, "window": 10}, 
-                    "minutes": {"limit": 1200000, "window": 600}
-                },
-                "europe": {
-                    "seconds": {"limit": 20000, "window": 10}, 
-                    "minutes": {"limit": 1200000, "window": 600}
-                },
-            }
+            "pattern": r"^\/riot\/account\/v1\/active-shards\/by-game\/([^/]+)\/by-puuid\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_REGIONAL_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/riot/account/v1/region/by-game",
+            "pattern": r"^\/riot\/account\/v1\/region\/by-game\/([^/]+)\/by-puuid\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_REGIONAL_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
         },
     ],
     "MATCH-V5": [
@@ -954,7 +1055,99 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
                     "minutes": {"limit": None, "window": None}
                 },
             }
+        },
+        {
+            "method": "/lol/match/v5/matches/by-puuid/replays",
+            "pattern": r"^\/lol\/match\/v5\/matches\/by-puuid\/([^/]+)\/replays$",
+            "routers": build_router_limits(
+                LOL_MATCH_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
         }
+    ],
+    "LOL-STATUS-V4": [
+        {
+            "method": "/lol/status/v4/platform-data",
+            "pattern": r"^\/lol\/status\/v4\/platform-data$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+    ],
+    "LOL-CHALLENGES-V1": [
+        {
+            "method": "/lol/challenges/v1/challenges/config",
+            "pattern": r"^\/lol\/challenges\/v1\/challenges\/config$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/lol/challenges/v1/challenges/percentiles",
+            "pattern": r"^\/lol\/challenges\/v1\/challenges\/percentiles$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/lol/challenges/v1/challenges/leaderboards/by-level",
+            "pattern": r"^\/lol\/challenges\/v1\/challenges\/([^/]+)\/leaderboards\/by-level\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/lol/challenges/v1/challenges/percentiles/by-challenge",
+            "pattern": r"^\/lol\/challenges\/v1\/challenges\/([^/]+)\/percentiles$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/lol/challenges/v1/challenges/config/by-challenge",
+            "pattern": r"^\/lol\/challenges\/v1\/challenges\/([^/]+)\/config$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+        {
+            "method": "/lol/challenges/v1/player-data",
+            "pattern": r"^\/lol\/challenges\/v1\/player-data\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
     ],
     "CHAMPION-MASTERY-V4": [
         {
@@ -1221,5 +1414,18 @@ RATE_LIMITS_BY_SERVICE_BY_METHOD = {
                 },
             }
         },
-    ]
+    ],
+    "SPECTATOR-V5": [
+        {
+            "method": "/lol/spectator/v5/active-games/by-summoner",
+            "pattern": r"^\/lol\/spectator\/v5\/active-games\/by-summoner\/([^/]+)$",
+            "routers": build_router_limits(
+                LOL_PLATFORM_ROUTERS,
+                seconds_limit=20000,
+                seconds_window=10,
+                minutes_limit=1200000,
+                minutes_window=600,
+            ),
+        },
+    ],
 }
