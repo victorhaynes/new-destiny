@@ -2,9 +2,10 @@ import json
 import textwrap
 from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_method_config, derive_riot_service
-from typing import Optional, Any
+from typing import Optional
+from .json_types import JSONValue, RiotOffendingContext
 
-def format_offending_context(offending_context) -> str:
+def format_offending_context(offending_context: RiotOffendingContext) -> str:
     """
     Format the offending_context into a readable multiline string. 
     Used for better logging support when a Riot rate limit exception or a general non-ok response (RiotAPIError) occurs.
@@ -24,7 +25,7 @@ def format_offending_context(offending_context) -> str:
         lines.append(f"      {key}: {value}")
 
     lines.append(f"    Body:  type({type(body)})")
-    body_str = json.dumps(body, indent=2) if isinstance(body, dict) else str(body)
+    body_str = json.dumps(body, indent=2)
     for ln in textwrap.wrap(body_str, width=100)[:30]:
         lines.append("      " + ln)
     if len(body_str) > 100 * 30:
@@ -78,7 +79,7 @@ class RiotRelatedRateLimitException(Exception):
     enforcement_type: str
     subdomain: str
     riot_endpoint: str
-    offending_context: Any | None
+    offending_context: RiotOffendingContext | None
 
     def __init__(
         self,
@@ -87,7 +88,7 @@ class RiotRelatedRateLimitException(Exception):
         enforcement_type: str,
         subdomain: str,
         riot_endpoint: str,
-        offending_context: Any | None = None,
+        offending_context: RiotOffendingContext | None = None,
     ) -> None:
         super().__init__()
         self.retry_after = retry_after
@@ -113,7 +114,7 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         minutes_window: int,
         seconds_count: int | None = None,
         minutes_count: int | None = None,
-        offending_context: Any | None = None,
+        offending_context: RiotOffendingContext | None = None,
     ) -> None:
         super().__init__(
             retry_after=retry_after,
@@ -191,7 +192,7 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
         seconds_window: int | None = None,
         minutes_count: int | None = None,
         minutes_window: int | None = None,
-        offending_context: Any | None = None,
+        offending_context: RiotOffendingContext | None = None,
     ):
         super().__init__(
             retry_after=retry_after,
@@ -261,7 +262,7 @@ class ServiceRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExcepti
         enforcement_type: str,
         subdomain: str,
         riot_endpoint: str,
-        offending_context: Any | None = None,
+        offending_context: RiotOffendingContext | None = None,
     ):
         super().__init__(
             retry_after=retry_after,
@@ -311,7 +312,7 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         method: str,
         enforcement_type: str,
         riot_endpoint: str,
-        offending_context: Any | None = None,
+        offending_context: RiotOffendingContext | None = None,
     ):
         super().__init__(
             retry_after=retry_after,
@@ -353,7 +354,7 @@ class RiotAPIError(RiotRelatedException):
     """
     500 series or non 429 status code errors received from Riot.
     """
-    def __init__(self, status_code: int, riot_endpoint:str, message: str | dict, offending_context: Any | None = None):
+    def __init__(self, status_code: int, riot_endpoint:str, message: JSONValue, offending_context: RiotOffendingContext | None = None):
         self.status_code = status_code
         self.message = message
         self.subdomain = self.get_subdomain(riot_endpoint=riot_endpoint)

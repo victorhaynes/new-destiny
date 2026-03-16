@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from typing import TypedDict
+
 type JSONPrimitive = str | int | float | bool | None
 type JSONObject = dict[str, JSONValue]
 type JSONArray = list[JSONValue]
 type JSONValue = JSONPrimitive | JSONObject | JSONArray
 type RiotResponse = JSONObject | JSONArray | None
+
+
+class RiotOffendingContext(TypedDict):
+    headers: dict[str, str]
+    body: JSONValue | None
 
 
 def expect_object(value: RiotResponse) -> JSONObject:

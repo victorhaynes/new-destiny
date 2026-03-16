@@ -2,7 +2,7 @@ from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_service, derive_riot_method_config
 from .exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, ND_CUSTOM_SECONDS_LIMIT, ND_CUSTOM_SECONDS_WINDOW, ND_PRODUCTION
-from typing import Any
+from .json_types import RiotOffendingContext
 
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
@@ -207,7 +207,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         
         return True
 
-    async def write_inbound_application_rate_limit(self, retry_after: int, offending_context: Any):
+    async def write_inbound_application_rate_limit(self, retry_after: int, offending_context: RiotOffendingContext):
         """
         Set the application rate limit blocking key in Redis with a TTL.
         This is only for when we actually experience a 429 response with X-Rate-Limit-Type header
@@ -452,7 +452,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         
         return True
     
-    async def write_inbound_method_rate_limit(self, retry_after: int, offending_context: Any):
+    async def write_inbound_method_rate_limit(self, retry_after: int, offending_context: RiotOffendingContext):
         """
         Set the method rate limit blocking key in Redis with a TTL. This is only for when we actually experience a
         429 response with X-Rate-Limit-Type header with a value of "method"
@@ -521,7 +521,7 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
                 )
         return True
     
-    async def write_inbound_service_rate_limit(self, offending_context):
+    async def write_inbound_service_rate_limit(self, offending_context: RiotOffendingContext):
         """Set the service rate limit key in Redis with a TTL."""
         # Create the key with a 68-second TTL if it doesn't already exist (NX)
         await self.redis.set(self.service_key, 1, ex=self.__class__.SERVICE_BLOCK_DURATION, nx=True)
@@ -569,7 +569,7 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
             )
         return True
     
-    async def write_inbound_unspecified_rate_limit(self, retry_after: int, offending_context: Any):
+    async def write_inbound_unspecified_rate_limit(self, retry_after: int, offending_context: RiotOffendingContext):
         """
         Set the unspecified rate limit blocking key in Redis with a TTL. This is only for when we actually expereince a
         429 response with a missing X-Rate-Limit-Type header or unknown value. 

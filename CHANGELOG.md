@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-03-16
+### Changed
+- Aligned `RiotAPIError.message` with the library's schema-agnostic `JSONValue` type so non-object JSON error bodies type-check correctly.
+- Added and exported a typed `RiotOffendingContext` shape for captured Riot error metadata (`headers` plus `body`).
+- Tightened exception and rate-limiter signatures to use the shared offending-context type consistently.
+
 ## [0.3.3] - 2026-03-16
 ### Changed
 - File clean up.

@@ -315,6 +315,10 @@ python example.py
 
 If you want typing help without tying the package to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_object()`, `expect_array()`, `expect_string()`, `expect_int()`, etc.
 
+Exception payloads follow the same schema-agnostic model:
+- `RiotAPIError.message` is a `JSONValue`
+- `exc.offending_context` is `RiotOffendingContext | None` with `headers: dict[str, str]` and `body: JSONValue | None`
+
 ```sh
 # To examine what is going on inside Redis, first open the Redis CLI where your Redis server is running:
 redis-cli
