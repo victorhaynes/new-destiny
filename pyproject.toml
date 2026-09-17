@@ -1,13 +1,13 @@
 [project]
 name = "new-destiny"
-version = "0.3.4"
+version = "0.3.8"
 description = "An easy to use, fully async, fast, scalable, interpretable rate limiting solution for the Riot Games API (currently for League of Legends only) built on Python, asyncio, and Redis."
 authors = [
     {name = "Victor Haynes",email = "vichaynesdevelopment@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.13,<4.0"
+requires-python = ">=3.12,<4.0"
 
 dependencies = [
     "httpx>=0.28.0,<0.29",

@@ -18,12 +18,12 @@ except KeyError:
     raise RuntimeError("Missing ND_REDIS_PORT, please set it in your application's .env file or your environment.")
 
 try:
-    ND_DEBUG = os.environ["ND_DEBUG"]
-    if ND_DEBUG not in ("1", "0"):
-        raise ValueError(f"ND_DEBUG must be 0 or 1. You set it to {ND_DEBUG}.")
-    ND_DEBUG = int(ND_DEBUG)
+    _log_level = os.environ["ND_LOG_LEVEL"]
+    if _log_level not in ("0", "1", "2", "3"):
+        raise ValueError(f"ND_LOG_LEVEL must be 0, 1, 2, or 3. You set it to {_log_level}.")
+    ND_LOG_LEVEL = int(_log_level)
 except KeyError:
-    raise RuntimeError("Missing ND_DEBUG, please set it to 0 or 1 (bool) in your application's .env file or your environment.")
+    raise RuntimeError("Missing ND_LOG_LEVEL, please set it to 0, 1, 2, or 3 in your application's .env file or your environment.")
 
 try:
     ND_PRODUCTION = os.environ["ND_PRODUCTION"]

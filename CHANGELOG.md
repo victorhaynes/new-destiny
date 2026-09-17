@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8]
+### Changed
+- Included `enforcement_type` consistently in rate-limit events and replaced verbose expected Spectator `404` output with a structured no-active-game event without changing the exception contract.
+- Replaced the boolean `ND_DEBUG` setting with required `ND_LOG_LEVEL` levels `0` through `3`. Production deployments can now capture errors and rate-limit events without successful request tracing; `ND_DEBUG` is no longer supported.
+
+## [0.3.7]
+### Changed
+- Isolated unspecified Riot server-enforced throttles for the Spectator active-game endpoint to a method-and-routing-value Redis block instead of the shared subdomain fallback. This is necessary because Spectator endpoint requests have been observed receiving unexpected server-enforced throttles frequently (basically on every session opened) even while traffic remains well below Riot's communicated rate limits.
+- Improved structured logging for external unexpected throttles, internal preflight blocks, retry metadata, and the resulting blocking scope.
+- Replaced inconsistent Redis key names with the `nd:` namespace and a consistent scope/kind/routing-value layout. The Spectator exception uses the explicit `known-unpredictable` scope because that endpoint can be server-throttled while well below Riot's communicated limits, while truly unexpected throttles use `unspecified`. Existing Redis state is not migrated automatically; clear or expire old keys before adopting this schema.
+
+## [0.3.6] - 2026-05-15
+### Changed
+- Relaxed minimum python requirement to 3.12.
+
+## [0.3.5] - 2026-03-16
+### Changed
+- Clarified the schema-agnostic typing design in the README and documented a simple local `cast(..., Any)` pattern for callers who want less type-checker noise.
+- Kept the public JSON helper API focused on the base `expect_*()` functions rather than adding field-specific sugar.
+- Added focused tests for the JSON type helper behavior.
+
 ## [0.3.4] - 2026-03-16
 ### Changed
 - Aligned `RiotAPIError.message` with the library's schema-agnostic `JSONValue` type so non-object JSON error bodies type-check correctly.

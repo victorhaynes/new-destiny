@@ -1,8 +1,10 @@
+import re
 from urllib.parse import urlparse
 from .rate_limit_helpers import derive_riot_service, derive_riot_method_config
 from .exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
-from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, ND_CUSTOM_SECONDS_LIMIT, ND_CUSTOM_SECONDS_WINDOW, ND_PRODUCTION
+from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, ND_CUSTOM_SECONDS_LIMIT, ND_CUSTOM_SECONDS_WINDOW, ND_PRODUCTION, ND_LOG_LEVEL
 from .json_types import RiotOffendingContext
+from .utilities import custom_print
 
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
@@ -17,6 +19,12 @@ class BaseRateLimitingLogic:
         self.riot_endpoint = riot_endpoint
         self.subdomain = self.get_subdomain(riot_endpoint)
         self.redis = async_redis_client
+
+    @staticmethod
+    def key_token(value: str) -> str:
+        """Convert a service or method identifier into a readable key token."""
+        token = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+        return token or "unknown"
 
     def get_subdomain(self, riot_endpoint: str):
         parsed_url = urlparse(riot_endpoint)
@@ -65,7 +73,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         Generate application rate limit keys.
         This holds an integer count value that gets incremented by 1 per request. One half of what is_allowed() checks.
         """
-        return f"nd_application_rate_limit_{self.subdomain}_key_for_{window_type}"
+        return f"nd:application:count:{self.subdomain}:{window_type}"
     
     def generate_blocking_key(self):
         """
@@ -75,7 +83,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         then we use this blocking key with a TTL set to the "Retry-After" header's integer value so we respect the timeout
         for as long as it is valid whether or not our internal counts hit their limit.
         """
-        return f"nd_blocking_key_for_application_rate_limit_{self.subdomain}"
+        return f"nd:application:block:{self.subdomain}"
 
 
     def get_check_and_increment_script(self):
@@ -282,7 +290,9 @@ class MethodRateLimiter(BaseRateLimitingLogic):
 
 
     def generate_key(self, window_type: str) -> str:
-        return f"nd_method_rate_limit_key_for_{self.subdomain}_{self.method}_{window_type}"
+        service = self.key_token(self.service)
+        method = self.key_token(self.method)
+        return f"nd:method:count:{self.subdomain}:{service}:{method}:{window_type}"
 
     def generate_blocking_key(self):
         """
@@ -292,7 +302,9 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         then we use this blocking key with a TTL set to the "Retry-After" header so we respect the timeout
         for as long as it is valid whether or not our internal counts hit their limit.
         """
-        return f"nd_blocking_method_rate_limit_key_for_{self.method}_{self.subdomain}"
+        service = self.key_token(self.service)
+        method = self.key_token(self.method)
+        return f"nd:method:block:{self.subdomain}:{service}:{method}"
 
     def get_check_and_increment_script(self):
         """Returns the Lua script content for atomic check and increment operations."""
@@ -507,7 +519,8 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
 
     def generate_key(self) -> str:
         """Generate a unique key for the service rate limit."""
-        return f"nd_blocking_key_for_service_rate_limit_{self.service}_{self.subdomain}"
+        service = self.key_token(self.service)
+        return f"nd:service:block:{self.subdomain}:{service}"
 
     async def is_allowed(self):
         """Check if the request is allowed under the service rate limit."""
@@ -536,13 +549,27 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
         )
     
 class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
-    """Rate limiter for unspecified rate limit type. Enforced per subdomain (what Riot incorrectly calls region)."""
+    """Fallback limiter for unexpected Riot rate limits.
+
+    Most services retain the conservative shared subdomain fallback. Spectator's
+    active-game method has its own fallback because its server-enforced throttles
+    are observed independently of the normal application, method, and service limits.
+    """
     def __init__(self, riot_endpoint, async_redis_client):
         super().__init__(riot_endpoint, async_redis_client)
         self.service = derive_riot_service(riot_endpoint)
         self.config = derive_riot_method_config(riot_endpoint, self.subdomain, self.service)
         self.method = self.config["method"]
-        self.blocking_key = f"blocking_key_for_unspecified_rate_limit_for_{self.subdomain}"
+        self.blocking_key = self.generate_blocking_key()
+
+    def generate_blocking_key(self) -> str:
+        """Return the fallback block key, isolating Spectator from other APIs."""
+        if self.service == "SPECTATOR-V5":
+            service = self.key_token(self.service)
+            method = self.key_token(self.method)
+            return f"nd:known-unpredictable:block:{self.subdomain}:{service}:{method}"
+
+        return f"nd:unspecified:block:{self.subdomain}:shared"
 
     async def is_allowed(self):
         """Check if the request is allowed under the experienced but unspecified rate limit."""
@@ -557,6 +584,19 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
         if exists:
             # Ensure non-negative TTL value
             remaining_ttl = max(1, remaining_ttl)
+
+            if ND_LOG_LEVEL >= 2:
+                custom_print({
+                    "event": "riot_rate_limit_blocked_before_request",
+                    "rate_limit_type": "unspecified",
+                    "enforcement_type": "internal",
+                    "service": self.service,
+                    "method": self.method,
+                    "subdomain": self.subdomain,
+                    "riot_endpoint": self.riot_endpoint,
+                    "blocking_key": self.blocking_key,
+                    "remaining_ttl_seconds": remaining_ttl,
+                }, color="yellow")
             
             raise UnspecifiedRateLimitExceeded(
                 retry_after=remaining_ttl,

@@ -9,7 +9,7 @@ import httpx
 import random
 from functools import wraps
 from typing import Any, Awaitable, Callable, Mapping, ParamSpec, TypeVar, cast
-from .settings.config import ND_DEBUG
+from .settings.config import ND_LOG_LEVEL
 
 """
 Note: the retry logic is currently only meant for background processes. 
@@ -112,7 +112,7 @@ def retry_on_riot_rate_limited_or_network_error(
                         raise
 
                     sleep_s = int(exc.retry_after) + 1
-                    if ND_DEBUG:
+                    if ND_LOG_LEVEL >= 2:
                         custom_print(
                             f"[Riot RL] {exc.__class__.__name__}, enforcement_type={exc.enforcement_type} "
                             f"retry_after={exc.retry_after} sleep={sleep_s}s "
@@ -130,7 +130,7 @@ def retry_on_riot_rate_limited_or_network_error(
                         raise
 
                     sleep_s = _exp_backoff_with_jitter(attempt=net_failures_seen, base=1.0, cap=20.0)
-                    if ND_DEBUG:
+                    if ND_LOG_LEVEL >= 1:
                         custom_print(
                             f"[Network] {exc.error_type}: {exc.message} "
                             f"sleep={sleep_s:.2f}s "

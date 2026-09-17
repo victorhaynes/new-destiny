@@ -32,7 +32,12 @@
 - `ND_REDIS_URL` takes a string value: enter the address your `Redis` instance is running on.
 Can be an actual address, "localhost", or "service_name" if your application code & `Redis` are in the same Docker compose stack.
 - `ND_REDIS_PORT` takes an integer value: enter the port number `Redis` is listening to.
-- `ND_DEBUG` takes an integer value 0 or 1: decide if you want the rate limiter to log what it is attempting to do/experiencing. Very useful if you are experiencing unexpected behavior in your application code or from the Riot API (which does happen). Highly recommend you set this to 1 until you are comfortable with your code and mine. Note debug mode is safe to use in a production environment. It **will** expose to whoever has access to your server logs: things like player PUUIDs (which are encrypted and have basically no malintent use case), response headers, response bodies, show what URL is being tried, along with the current state of your rate limiter(s). But `New Destiny` will **not** expose your API key.
+- `ND_LOG_LEVEL` takes a required integer from 0 to 3:
+    - `0`: no New Destiny logging.
+    - `1`: API and network errors, plus unexpected HTTP `404` responses.
+    - `2`: level 1 plus rate-limit events, internal rate-limit blocks, and expected Spectator no-active-game responses.
+    - `3`: all level 2 events plus successful rate-limit checks and outbound Riot URLs.
+  Levels 2 and 3 can expose PUUIDs, response headers, response bodies, and URLs to whoever has access to your server logs. New Destiny will not expose your API key. `ND_DEBUG` is obsolete and is not supported.
 
 ## Example Configuration
 Use an `.env` file to declare these values:
@@ -45,7 +50,7 @@ ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_PRODUCTION=1
 ND_REDIS_URL="your_redis_address_or_docker_service_name"
 ND_REDIS_PORT=123
-ND_DEBUG=1
+ND_LOG_LEVEL=3
 ```
 In the rare case where Riot has given you heightened allowances you can configure your custom `Application Rate Limits` and window durations **using time in seconds--NOT minutes**. You are not allowed to use custom limits if you are not in production mode:
 ```bash
@@ -55,13 +60,70 @@ In the rare case where Riot has given you heightened allowances you can configur
 ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_REDIS_URL="localhost"
 ND_REDIS_PORT=6379
-ND_DEBUG=1
+ND_LOG_LEVEL=3
 ND_PRODUCTION=1
 ND_CUSTOM_SECONDS_LIMIT=900
 ND_CUSTOM_SECONDS_WINDOW=1
 ND_CUSTOM_MINUTES_LIMIT=60000
 ND_CUSTOM_MINUTES_WINDOW=180
 ```
+
+# Rate-limit enforcement and unexpected Riot throttles
+
+New Destiny always checks the application-wide rate limit before making a
+request. An endpoint-specific exception must never bypass that application
+gate. If the application-wide limiter is blocked, all requests for that
+routing value remain blocked until its TTL expires.
+
+New Destiny also checks the configured method and service limits. These
+limits are based on Riot's communicated rate-limit categories and are kept
+separate where Riot identifies the category.
+
+Riot can return a `429` with an unrecognized or missing
+`x-rate-limit-type`. This is treated as an unspecified, externally enforced
+limit. The package records the response's `Retry-After` value, writes a
+temporary Redis block, and raises the appropriate rate-limit exception. The
+exception's `enforcement_type` identifies the source:
+
+- `external`: Riot returned the unexpected throttle and New Destiny created
+  the Redis block.
+- `internal`: New Destiny rejected a later request because that Redis block
+  was already present during preflight.
+
+Rate-limit debug events include the same `enforcement_type` values. A
+`riot_rate_limit_response` or `riot_unexpected_rate_limit` event is
+`external`; a `riot_rate_limit_blocked_before_request` event is `internal`.
+
+The Spectator active-game endpoint is intentionally carved out from the
+shared unspecified-limit fallback. An unexpected throttle for
+`/lol/spectator/v5/active-games/by-summoner` uses a method-and-routing-value
+key, such as:
+
+```text
+nd:known-unpredictable:block:na1:spectator-v5:lol-spectator-v5-active-games-by-summoner
+```
+
+This means an unexpected `na1` Spectator throttle blocks subsequent `na1`
+Spectator requests, but does not unnecessarily block Match-V5 or other Riot
+endpoints. The application-wide limiter still applies to all of them.
+
+This key is deliberately classified as `known-unpredictable` rather than
+`unspecified`. The behavior is unexpected relative to Riot's communicated
+limits, but it is a known characteristic of this endpoint whose occurrence
+cannot be predicted from those limits. A truly unrecognized throttle on
+another endpoint uses the shared
+`nd:unspecified:block:<routing-value>:shared` fallback.
+
+This carve-out is intentionally narrow. Riot may change the behavior or
+headers for this endpoint, so applications should use `ND_LOG_LEVEL=2` or `3`
+while diagnosing live-game traffic. Debug logs include structured endpoint,
+service, routing value, response status, rate-limit type, retry duration, and
+blocking-key context, in addition to the existing response diagnostics.
+
+An HTTP `404` from the Spectator active-game endpoint is the expected
+no-active-game result. It is reported as the concise
+`riot_expected_empty_response` debug event while other unexpected `404`
+responses retain their normal error diagnostics and exception behavior.
 
 # Usage
 ```sh
@@ -70,7 +132,7 @@ pip install new-destiny
 ```bash
 # your_project/.env
 # Step 1) setup your .env file, use this setting along with your other config
-ND_DEBUG=1
+ND_LOG_LEVEL=3
 ```
 ```py
 # your_project/example.py
@@ -227,7 +289,7 @@ For the next example try this `.env` file configuration so I can illuminate how 
 ND_PRODUCTION=1
 ND_CUSTOM_SECONDS_LIMIT=5
 ND_CUSTOM_SECONDS_WINDOW=10
-ND_DEBUG=1
+ND_LOG_LEVEL=3
 ```
 ```py
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
@@ -313,7 +375,21 @@ python example.py
 - `list[JSONValue]`
 - `None`
 
-If you want typing help without tying the package to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_object()`, `expect_array()`, `expect_string()`, `expect_int()`, etc.
+If you want typing help despite the fact that `New Destiny` does not tie itself by design to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_object()`, `expect_array()`, `expect_string()`, `expect_int()`, etc.
+
+This is a deliberate design choice. `New Destiny` stays schema-agnostic on purpose so the library does not become brittle when Riot adds, removes, or reshapes fields. The runtime stays flexible, and type-checker users can still narrow values when they want to.
+
+If you want less type-checker noise in your application code, a simple option is to narrow once and then cast locally:
+
+```py
+from typing import Any, cast
+
+account = cast(dict[str, Any], expect_object(response))
+puuid: str = account["puuid"]
+game_name: str = account["gameName"]
+```
+
+This keeps `New Destiny` unopinionated while letting your own application decide how strict or relaxed to be about Riot's payload shapes.
 
 Exception payloads follow the same schema-agnostic model:
 - `RiotAPIError.message` is a `JSONValue`
@@ -331,7 +407,7 @@ TTL key_name
 # Debugging / Examining The Behavior
 ```bash
 ND_RIOT_API_KEY="RGAPI-ABC-123"
-ND_DEBUG=1
+ND_LOG_LEVEL=3
 ND_PRODUCTION=0
 ```
 Try using a dumb value for `ND_RIOT_API_KEY` and running the example code. Examine the traceback and you'll notice all kinds of helpful information gets captured. This gets even more helpful when you start experiencing `internally` (blocked by `New Destiny`) and `externally` (Blocked by Riot/`429` was actually received) enforced `RiotRelatedRateLimitException` errors and not just general `RiotAPIError`s. See "design philosophy" for more.
@@ -411,7 +487,7 @@ If you want to see the actual `internal` rate limiting behavior in action set `N
 # Real Production keys will have limits too high for this example to illustrate
 ND_RIOT_API_KEY="USE_A_DEVELOPMENT_OR_PERSONAL_KEY"
 ND_PRODUCTION=1
-ND_DEBUG=0 # Turn it off to not clutter the output
+ND_LOG_LEVEL=0 # Turn it off to not clutter the output
 ND_CUSTOM_SECONDS_LIMIT=9999 # well above the Dev/Personal limit
 ND_CUSTOM_SECONDS_WINDOW=20 # well above the Dev/Personal limit
 ```
@@ -677,7 +753,35 @@ Others deal with the `429`s as they come and do not bother trying to prevent the
 On `interpretability`:
 
 It is very easy to connect to your `Redis` instance and see what is going on.
-Every `New Destiny` related `Redis` key begins with a `nd_` prefix.
+Every `New Destiny` related `Redis` key begins with the `nd:` namespace. Keys
+use the general shape
+`nd:<scope>:<kind>:<routing-value>[:<service>[:<method>[:<window>]]]`.
+Special behavior is represented by a semantic scope, such as
+`known-unpredictable`, rather than by a manually maintained schema version.
+
+The complete key families are:
+
+```text
+# Application-wide counters and Riot/application blocks
+nd:application:count:<routing-value>:seconds
+nd:application:count:<routing-value>:minutes
+nd:application:block:<routing-value>
+
+# Communicated endpoint and service limits
+nd:method:count:<routing-value>:<service>:<method>:seconds
+nd:method:count:<routing-value>:<service>:<method>:minutes
+nd:method:block:<routing-value>:<service>:<method>
+nd:service:block:<routing-value>:<service>
+
+# Unexpected 429 fallback blocks
+nd:unspecified:block:<routing-value>:shared
+nd:known-unpredictable:block:<routing-value>:<service>:<method>
+```
+
+`<method>` is a lowercase, hyphenated token derived from the configured Riot
+method path. The `known-unpredictable` family is currently used for the
+Spectator active-game method; its method-and-routing-value scope prevents that
+endpoint's unusual throttles from blocking unrelated traffic.
 For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
