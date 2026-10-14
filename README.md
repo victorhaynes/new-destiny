@@ -56,7 +56,7 @@ In the rare case where Riot has given you heightened allowances you can configur
 ```bash
 # Instead of the Application Rate Limit being the default 500/10s and 30,000/10m
 # This is specifying 900/s and 60,000/3m
-# And just because you specify this doesn't mean you Riot will give you this throughput
+# And just because you specify this doesn't mean Riot will give you this throughput
 ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_REDIS_URL="localhost"
 ND_REDIS_PORT=6379
@@ -137,9 +137,9 @@ ND_LOG_LEVEL=3
 ```py
 # your_project/example.py
 from new_destiny.riot_get_request import perform_riot_request
-from new_destiny.json_types import expect_object, expect_string
+from new_destiny.json_types import expect_dict, expect_string
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotNetworkError, RiotRelatedException
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
 # from new_destiny.exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
@@ -150,20 +150,25 @@ import asyncio
 import time # Not a requirement, just for logging purposes
 
 
-# 2) Configure SSL Context for HTTPX. Accept this default or choose your own.
+# 2) Configure SSL Context for HTTPX. HTTPX uses this to verify Riot's HTTPS certificate.
+# The explicit Certifi bundle helps when local Python does not have its CA certificates configured.
+# This is safe for production as written. If SSL is unfamiliar, safely use this code as written and do not change it.
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 # 3) Connect to Redis
 async_redis_client = redis.asyncio.Redis(host=ND_REDIS_URL, port=ND_REDIS_PORT, db=0, decode_responses=True)
 
 # 4) Your async application code
+# HTTPX was selected because it provides an async client with connection reuse and
+# concurrency support while your application keeps control of the client lifecycle.
 async def main():
     # Example application code:
     # do_some_work() ...
 
     """
     EXAMPLE 1:
-    A simple GET request using New Destiny
+    A simple GET request using New Destiny.
+    Let's get Faker's account details.
     """
     start_time = time.monotonic()
     async with httpx.AsyncClient(verify=ssl_context) as client:
@@ -181,7 +186,7 @@ async def main():
 
     if account_details is None:
         raise ValueError("Expected account details but Riot returned no content.")
-    account_payload = expect_object(account_details)
+    account_payload = expect_dict(account_details)
     puuid = expect_string(account_payload["puuid"])
     
     """
@@ -238,12 +243,16 @@ async def main():
         print(exc.retry_after)
         pass
     except RiotAPIError as exc:
-        # Your error handling logic
-        # RiotAPIError is raised when a non-429, non-ok response is returned from Riot such as a 500 series (rare) or 404.
+        # <- Your error handling logic here ->
+        # RiotAPIError is raised for non-success API responses that are NOT rate limits.
+        # In general this works exactly how you would think it does.
+        pass
+    except RiotNetworkError as exc:
+        # A transient connection, gateway, or Cloudflare failure occurred.
         pass
     except RiotRelatedException as exc:
         # Use this if you want a catch-all for any Riot API related exception.
-        # This is just the union of RiotRelatedRateLimitException and RiotAPIError
+        # This includes rate-limit, API, and transient network errors.
         pass
     except Exception as exc:
         # If 'exc' exception is not of type RiotRelatedException it has nothing to
@@ -370,12 +379,63 @@ if __name__ == "__main__":
 python example.py
 ```
 
+```py
+"""
+EXAMPLE 5: Spectator active-game edge case.
+A player who is not currently in a game produces an expected 404.
+"""
+spectator_endpoint = f"https://kr.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
+try:
+    async with httpx.AsyncClient(verify=ssl_context) as client:
+        spectator_details = await perform_riot_request(
+            riot_endpoint=spectator_endpoint,
+            client=client,
+            async_redis_client=async_redis_client,
+        )
+except RiotAPIError as exc:
+    # <- Your error handling logic here ->
+    # RiotAPIError is raised for non-success API responses that are NOT rate limits.
+    # In general this works exactly how you would think it does.
+    # IMPORTANT EDGE CASE: There is a common scenario when the Spectator API
+    # where if you search player that exists but currently is not in game you will receive a 404
+    # from Riot instead of a 200, with an empty list or dict, or 204. That is anti-pattern with the oter
+    # Riot APIs but that is how Spectator works.
+    # At ND_LOG_LEVEL=2 or higher, New Destiny logs this expected response as
+    # a structured no-active-game event instead of noisy error output.
+    if exc.status_code == 404:
+        spectator_details = None
+        print("Riot says this player is not currently in-game.")
+    else:
+        raise
+```
+
+## Running Tests
+
+The unit tests are separate from the live API demo. They do not require a Riot API key or Redis for the current test suite.
+
+From the repository root, use Python 3.12 or newer:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest -v
+```
+
+Use `python -m pytest -q` when you want the compact summary. The current tests validate the JSON type-narrowing helpers, so successful runs report test names and pass/fail status rather than making Riot requests or printing application diagnostics.
+
+The live API exercise is not the test suite. It makes real Riot requests, requires a configured `.env` file and Redis, and is useful for examining rate-limit and concurrency behavior:
+
+```sh
+ND_LOG_LEVEL=3 python demo.py
+```
+
 `perform_riot_request()` and `riot_request_with_retry()` return a schema-agnostic `RiotResponse` type:
 - `dict[str, JSONValue]`
 - `list[JSONValue]`
 - `None`
 
-If you want typing help despite the fact that `New Destiny` does not tie itself by design to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_object()`, `expect_array()`, `expect_string()`, `expect_int()`, etc.
+If you want typing help despite the fact that `New Destiny` does not tie itself by design to Riot's payload contracts, use the helper functions in `new_destiny.json_types` like `expect_dict()`, `expect_list()`, `expect_string()`, `expect_int()`, etc.
 
 This is a deliberate design choice. `New Destiny` stays schema-agnostic on purpose so the library does not become brittle when Riot adds, removes, or reshapes fields. The runtime stays flexible, and type-checker users can still narrow values when they want to.
 
@@ -384,7 +444,7 @@ If you want less type-checker noise in your application code, a simple option is
 ```py
 from typing import Any, cast
 
-account = cast(dict[str, Any], expect_object(response))
+account = cast(dict[str, Any], expect_dict(response))
 puuid: str = account["puuid"]
 game_name: str = account["gameName"]
 ```
@@ -686,10 +746,11 @@ This is off-limits. It will be added when I get around to integrating RSO into m
 If there is high demand I may prioritize this.
 
 `ACCOUNT-V1` supports:
-- /riot/account/v1/accounts/by-riot-id
-- /riot/account/v1/accounts/by-puuid
-- /riot/account/v1/active-shards/by-game
-- /riot/account/v1/region/by-game
+- /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}
+- /riot/account/v1/accounts/by-puuid/{puuid}
+- /riot/account/v1/accounts/by-puuid/{puuid}/active-shards
+- /riot/account/v1/active-shards/by-game/{game}/by-puuid/{puuid}
+- /riot/account/v1/region/by-game/{game}/by-puuid/{puuid}
 
 If you want more methods or LoL-related services supported,
 feel free to request them and I'll do my best to add them or open a pull request.

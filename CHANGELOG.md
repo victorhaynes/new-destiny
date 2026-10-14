@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.9]
+### Changed
+- Updated the README, usage examples, and local demo instructions to match the current `ND_LOG_LEVEL`, retry, rate-limit, and exception behavior.
+- Added an explicit Spectator active-game example for the common expected `404` response: Riot is saying the searched player is not currently in-game, while the existing `RiotAPIError` exception contract remains unchanged.
+- Clarified the distinction between normal non-success HTTP responses represented by `RiotAPIError`, transient transport or infrastructure failures represented by `RiotNetworkError`, and rate-limit responses represented by `RiotRelatedRateLimitException`.
+- Documented the supported Account-V1 endpoint paths.
+- Removed duplicate Spectator `404` detection logic and corrected stale example wording.
+- Renamed the schema-narrowing helper `expect_object()` to `expect_dict()`; the behavior is unchanged and callers can update this with a simple find-and-replace.
+- Renamed the schema-narrowing helper `expect_array()` to `expect_list()` to use Python terminology; the behavior is unchanged and callers can update this with a simple find-and-replace.
+- Clarified that the explicit Certifi-backed SSL context is safe for production, and documented why the application-provided client uses HTTPX for async requests, connection reuse, and concurrency support.
+- Renamed the live API exercise script from `tester.py` to `demo.py` and documented the separate unit-test and live-demo commands.
+- Documented `python -m pytest -v` for named test results and `-q` for the compact summary output.
+- Added focused offline tests for service/method/router rate-limit classification, including regional versus platform routing and invalid classifier inputs.
+- Typed JSON helper test fixtures as `RiotResponse` to avoid static type-checker errors from invariant dictionary values.
+
 ## [0.3.8]
 ### Changed
 - Included `enforcement_type` consistently in rate-limit events and replaced verbose expected Spectator `404` output with a structured no-active-game event without changing the exception contract.

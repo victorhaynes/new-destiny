@@ -5,12 +5,12 @@ from .json_types import (
     JSONValue,
     RiotOffendingContext,
     RiotResponse,
-    expect_array,
+    expect_list,
     expect_bool,
+    expect_dict,
     expect_float,
     expect_int,
     expect_number,
-    expect_object,
     expect_string,
 )
 
@@ -21,11 +21,11 @@ __all__ = [
     "JSONValue",
     "RiotOffendingContext",
     "RiotResponse",
-    "expect_array",
+    "expect_list",
     "expect_bool",
+    "expect_dict",
     "expect_float",
     "expect_int",
     "expect_number",
-    "expect_object",
     "expect_string",
 ]

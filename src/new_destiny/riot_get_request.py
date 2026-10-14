@@ -27,10 +27,10 @@ async def perform_riot_request(
     Performs a GET request to the Riot API while respecting their rate limiting.
     In the vast majority of cases you should expect this function to return valid JSON data in either a dict or list form.
     In rare cases (See Status Code 204 case) this function may correctly return None.
-    In all other cases you will experience a RiotRelatedException--either a RiotAPIError due to a 4XX or 5XX response from Riot, 
-    or an exception from the RiotRelatedRateLimitException classes where a rate limit is hit and New Destiny caught it.
-    Note that some 5XX errors are transient network related issues. You may want to catch httpx.RequestError (catch all),
-    httpx.ConnectionError, or httpx.TimeoutException errors in your application. These will buble up.
+    In all other cases you will experience a RiotRelatedException: RiotAPIError
+    for a non-success API response, RiotNetworkError for a transient connection,
+    gateway, or Cloudflare failure, or a RiotRelatedRateLimitException when a
+    rate limit is encountered.
     """
     # Instantiate the rate limiters
     application_rate_limiter = ApplicationRateLimiter(riot_endpoint, async_redis_client)
@@ -72,11 +72,6 @@ async def perform_riot_request(
             original_exception=e
         )
     status = response.status_code
-    expected_spectator_404 = (
-        status == 404
-        and service_rate_limiter.service == "SPECTATOR-V5"
-        and method_rate_limiter.method == "/lol/spectator/v5/active-games/by-summoner"
-    )
     expected_spectator_404 = (
         status == 404
         and service_rate_limiter.service == "SPECTATOR-V5"

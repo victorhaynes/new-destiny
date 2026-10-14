@@ -43,9 +43,11 @@ class RiotRelatedException(Exception):
 
 class RiotNetworkError(RiotRelatedException):
     """
-    Network-level failures that occur before/during connection to Riot's API.
-    This includes timeouts, connection errors, DNS failures, SSL issues, etc.
-    These are different from RiotAPIError because we never got a proper HTTP response from Riot.
+    Transient network or infrastructure failures while accessing Riot's API.
+    This includes timeouts, connection errors, DNS failures, SSL issues,
+    gateway errors, and Cloudflare errors.
+    These are different from RiotAPIError because they represent transient
+    infrastructure failures rather than a normal Riot API response.
     """
     def __init__(self, error_type: str, message: str, riot_endpoint: str, original_exception: Exception | None = None):
         super().__init__(message)
@@ -352,7 +354,10 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
 
 class RiotAPIError(RiotRelatedException):
     """
-    500 series or non 429 status code errors received from Riot.
+    Non-success HTTP responses represented as Riot API errors.
+
+    Rate limits and transient network or infrastructure failures use their own
+    exception types instead.
     """
     def __init__(self, status_code: int, riot_endpoint:str, message: JSONValue, offending_context: RiotOffendingContext | None = None):
         self.status_code = status_code

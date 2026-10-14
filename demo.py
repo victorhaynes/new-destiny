@@ -1,5 +1,5 @@
-# run this locally with python tester.py -- set ND_DEBUG=1 if desired
-from src.new_destiny.json_types import expect_object, expect_string
+# Run locally with: ND_LOG_LEVEL=3 python demo.py
+from src.new_destiny.json_types import expect_dict, expect_string
 from src.new_destiny.riot_get_request import perform_riot_request
 from src.new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
 from src.new_destiny.utilities import custom_print
@@ -12,9 +12,17 @@ import asyncio
 import redis.asyncio
 import time # Not a requirement, just for logging purposes
 
+# 2) Configure SSL Context for HTTPX. HTTPX uses this to verify Riot's HTTPS certificate.
+# The explicit Certifi bundle helps when local Python does not have its CA certificates configured.
+# This is safe for production as written. If SSL is unfamiliar, safely use this code as written and do not change it.
 ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+# 3) Connect to Redis
 async_redis_client = redis.asyncio.Redis(host=ND_REDIS_URL, port=ND_REDIS_PORT, db=0, decode_responses=True)
 
+# 4) Your async application code
+# HTTPX was selected because it provides an async client with connection reuse and
+# concurrency support while your application keeps control of the client lifecycle.
 async def main():
     # Example application code:
     # do_some_work() ...
@@ -32,7 +40,7 @@ async def main():
 
     if account_details is None:
         raise ValueError("Expected account details but Riot returned no content.")
-    account_payload = expect_object(account_details)
+    account_payload = expect_dict(account_details)
     print("Example PUUID:", expect_string(account_payload["puuid"]))
 
     start_time = time.monotonic()

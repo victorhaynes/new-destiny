@@ -1,9 +1,9 @@
 # your_project/example.py
-from new_destiny.json_types import expect_object, expect_string
+from new_destiny.json_types import expect_dict, expect_string
 from new_destiny.riot_get_request import perform_riot_request
 from new_destiny.riot_get_request_with_retry import riot_request_with_retry
 from new_destiny.settings.config import ND_REDIS_PORT, ND_REDIS_URL
-from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotRelatedException
+from new_destiny.exceptions import RiotRelatedRateLimitException, RiotAPIError, RiotNetworkError, RiotRelatedException
 # You can catch these exception subclasses if you want to but it is probably unnecessary:
 # from new_destiny.exceptions import ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
 import ssl
@@ -13,13 +13,17 @@ import redis.asyncio
 import asyncio
 import time # Not a requirement, just for logging purposes
 
-# 2) Configure SSL Context for HTTPX. Accept this default or choose your own.
+# 2) Configure SSL Context for HTTPX. HTTPX uses this to verify Riot's HTTPS certificate.
+# The explicit Certifi bundle helps when local Python does not have its CA certificates configured.
+# This is safe for production as written. If SSL is unfamiliar, safely use this code as written and do not change it.
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 # 3) Connect to Redis
 async_redis_client = redis.asyncio.Redis(host=ND_REDIS_URL, port=ND_REDIS_PORT, db=0, decode_responses=True)
 
 # 4) Your async application code
+# HTTPX was selected because it provides an async client with connection reuse and
+# concurrency support while your application keeps control of the client lifecycle.
 async def main():
     # Example application code:
     # do_some_work() ...
@@ -42,7 +46,7 @@ async def main():
     #     )
     #     if account_details is None:
     #         raise ValueError("Expected account details but Riot returned no content.")
-    #     account_payload = expect_object(account_details)
+    #     account_payload = expect_dict(account_details)
     #     puuid = expect_string(account_payload["puuid"])
     
     # # 6) Do whatever you want with the response
@@ -53,7 +57,7 @@ async def main():
     # print("Time:", time.monotonic() - start_time)
     # print("Feelin' lucky?")
 
-    # 7) Example Two: New Destiny with concurrency. Raise first exception (which include RiotRelatedRateLimitException(s)) if any encoutnered.
+    # 7) Example Two: New Destiny with concurrency. Raise the first exception (which includes RiotRelatedRateLimitException(s)) if any are encountered.
     # try:
     #     match_endpoints = [
     #         "https://asia.api.riotgames.com/lol/match/v5/matches/KR_7658126453",
@@ -95,18 +99,21 @@ async def main():
     #     pass
     # except RiotAPIError as exc:
     #     # Your error handling logic
-    #     # RiotAPIError is raised when a non-429, non-ok response is returned from Riot such as a 500 series (rare) or 404.
+    #     # RiotAPIError is raised for non-success API responses that are not rate limits.
+    #     pass
+    # except RiotNetworkError as exc:
+    #     # A transient connection, gateway, or Cloudflare failure occurred.
     #     pass
     # except RiotRelatedException as exc:
     #     # Use this if you want a catch-all for any Riot API related exception.
-    #     # This just the union of RiotRelatedRateLimitException and RiotAPIError        
+    #     # This includes rate-limit, API, and transient network errors.
     #     pass
     # except Exception as exc:
     #     # If 'exc' exception is not of type RiotRelatedException it has nothing to
     #     # do with Riot, likely has nothing to do with New Destiny, and is likely your application code
     #     pass
 
-    # # 8) Example Three: New Destiny with concurrency. Supress but gather any experienced errors.
+    # # 8) Example Three: New Destiny with concurrency. Suppress but gather any experienced errors.
     # start_time = time.monotonic()
     # async with httpx.AsyncClient(verify=ssl_context) as client:
     #     batch_results = await asyncio.gather(
@@ -133,15 +140,15 @@ async def main():
     # print("Dead man walkin'.")
     
     # 9) Example Four: Imagine you have a workflow that requires many requests to build something "whole".
-    # Imagine you want the match details for n = LAGE_NUBMER of Faker matches.
-    # For either resource or rate limit concerns you do not want to fire off n = LAGE_NUBMER requests concurrently.
+    # Imagine you want the match details for n = LARGE_NUMBER of Faker matches.
+    # For either resource or rate limit concerns you do not want to fire off n = LARGE_NUMBER requests concurrently.
     # You can use riot_request_with_retry() to automatically retry a request that gets rate limited 
     # (raises an exception of type RiotRelatedRateLimitException)
     # up to a total number of attempts (default is 3). This protects your workflow against rate limit exceptions.
-    # If a request gets rate limited more than the # of attempts specified the exception will propogate here. 
+    # If a request gets rate limited more than the number of attempts specified the exception will propagate here.
     # You can catch it with try/except. Other types of Exceptions will get raised immediately and do not get retried.
 
-    # You can still use standard python/asyncio tools to control the level of concurrecy or batch size
+    # You can still use standard python/asyncio tools to control the level of concurrency or batch size
     # but this example simply demonstrates how this would work if you have a series of requests that fire one at a time.
     # This function is useful if you have background jobs that interact with the Riot API.
     # It is probably inappropriate to have potential UI users of your application experience retry times
@@ -287,6 +294,32 @@ async def main():
     print("Type of first element", type(match_details[0]))
     print("Time:", time.monotonic() - start_time)
     print("Go ahead. I like moving targets.")
+
+    # 10) Example Five: Spectator active-game edge case.
+    # A player who is not currently in a game produces an expected 404.
+    # spectator_endpoint = f"https://kr.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
+    # try:
+    #     async with httpx.AsyncClient(verify=ssl_context) as client:
+    #         spectator_details = await perform_riot_request(
+    #             riot_endpoint=spectator_endpoint,
+    #             client=client,
+    #             async_redis_client=async_redis_client,
+    #         )
+    # except RiotAPIError as exc:
+    #     # <- Your error handling logic here ->
+    #     # RiotAPIError is raised for non-success API responses that are NOT rate limits.
+    #     # In general this works exactly how you would think it does.
+    #     # IMPORTANT EDGE CASE: There is a common scenario when the Spectator API
+    #     # where if you search player that exists but currently is not in game you will receive a 404
+    #     # from Riot instead of a 200, with an empty list or dict, or 204. That is anti-pattern with the oter
+    #     # Riot APIs but that is how Spectator works.
+    #     # At ND_LOG_LEVEL=2 or higher, New Destiny logs this expected response as
+    #     # a structured no-active-game event instead of noisy error output.
+    #     if exc.status_code == 404:
+    #         spectator_details = None
+    #         print("Riot says this player is not currently in-game.")
+    #     else:
+    #         raise
 
 
 if __name__ == "__main__":

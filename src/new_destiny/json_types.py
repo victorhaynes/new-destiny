@@ -14,14 +14,14 @@ class RiotOffendingContext(TypedDict):
     body: JSONValue | None
 
 
-def expect_object(value: RiotResponse) -> JSONObject:
-    """Narrow a Riot response to a JSON object."""
+def expect_dict(value: RiotResponse) -> JSONObject:
+    """Narrow a Riot response to a dict."""
     if not isinstance(value, dict):
         raise ValueError(f"Expected dict but got {type(value).__name__}")
     return value
 
 
-def expect_array(value: RiotResponse) -> JSONArray:
+def expect_list(value: RiotResponse) -> JSONArray:
     """Narrow a Riot response to a JSON array."""
     if not isinstance(value, list):
         raise ValueError(f"Expected list but got {type(value).__name__}")
