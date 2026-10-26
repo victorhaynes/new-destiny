@@ -33,6 +33,11 @@ try:
 except KeyError:
     raise RuntimeError("Missing ND_PRODUCTION, please set it to 0 or 1 (bool) in your application's .env file or your environment.")
 
+ND_ENABLE_METRICS = os.getenv("ND_ENABLE_METRICS", "1")
+if ND_ENABLE_METRICS not in ("1", "0"):
+    raise ValueError(f"ND_ENABLE_METRICS must be 0 or 1. You set it to {ND_ENABLE_METRICS}.")
+ND_ENABLE_METRICS = int(ND_ENABLE_METRICS)
+
 def get_validated_positive_int(var_name):
     val = os.getenv(var_name)
     if val is None:

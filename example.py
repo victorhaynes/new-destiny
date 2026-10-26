@@ -13,6 +13,9 @@ import redis.asyncio
 import asyncio
 import time # Not a requirement, just for logging purposes
 
+# Rate-limit exception metrics are enabled by default. Set ND_ENABLE_METRICS=0
+# in your environment if you do not want the temporary Redis counters.
+
 # 2) Configure SSL Context for HTTPX. HTTPX uses this to verify Riot's HTTPS certificate.
 # The explicit Certifi bundle helps when local Python does not have its CA certificates configured.
 # This is safe for production as written. If SSL is unfamiliar, safely use this code as written and do not change it.
@@ -89,7 +92,8 @@ async def main():
     #     print("End of the line.")
 
     # except RiotRelatedRateLimitException as exc:
-    #     # This explicitly means you were either rate limited by New Destiny (internally) or Riot (externally)
+    #     # This means New Destiny stopped the request before sending it (internal),
+    #     # or Riot received it and returned a 429 (external).
     #     # Important!
     #     # You can also specifically catch: ApplicationRateLimitExceeded, MethodRateLimitExceeded, ServiceRateLimitExceeded, UnspecifiedRateLimitExceeded
     #     # These also fall under type RiotRelatedException
@@ -309,10 +313,9 @@ async def main():
     #     # <- Your error handling logic here ->
     #     # RiotAPIError is raised for non-success API responses that are NOT rate limits.
     #     # In general this works exactly how you would think it does.
-    #     # IMPORTANT EDGE CASE: There is a common scenario when the Spectator API
-    #     # where if you search player that exists but currently is not in game you will receive a 404
-    #     # from Riot instead of a 200, with an empty list or dict, or 204. That is anti-pattern with the oter
-    #     # Riot APIs but that is how Spectator works.
+    #     # IMPORTANT EDGE CASE: Riot returns a 404 when a player exists but is
+    #     # not currently in-game. This differs from the normal Riot API pattern,
+    #     # but it is the expected Spectator-V5 response for no active game.
     #     # At ND_LOG_LEVEL=2 or higher, New Destiny logs this expected response as
     #     # a structured no-active-game event instead of noisy error output.
     #     if exc.status_code == 404:

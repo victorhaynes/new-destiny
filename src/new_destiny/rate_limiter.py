@@ -17,7 +17,7 @@ class BaseRateLimitingLogic:
     """Base class for rate limiting logic using Redis."""
     def __init__(self, riot_endpoint: str, async_redis_client):
         self.riot_endpoint = riot_endpoint
-        self.subdomain = self.get_subdomain(riot_endpoint)
+        self.routing_value = self.get_routing_value(riot_endpoint)
         self.redis = async_redis_client
 
     @staticmethod
@@ -26,19 +26,26 @@ class BaseRateLimitingLogic:
         token = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
         return token or "unknown"
 
-    def get_subdomain(self, riot_endpoint: str):
+    def get_routing_value(self, riot_endpoint: str):
+        """Return the first hostname component used as Riot's routing value.
+
+        This is the subdomain in the generic web-development sense. Riot
+        documentation incorrectly calls it a ``region``; the third-party
+        developer community often calls it a platform router. ``routing_value``
+        describes its role in the rate-limit model.
+        """
         parsed_url = urlparse(riot_endpoint)
         hostname = parsed_url.hostname  # Ex. "na1.api.riotgames.com"
         
         if not hostname:
-            raise ValueError(f"Invalid URL: No hostname found. Subdomain (what Riot docs inaccurately calls per 'region' for per-region enforcement) cannot be determined from {riot_endpoint}")
+            raise ValueError(f"Invalid URL: No hostname found. Routing value cannot be determined from {riot_endpoint}")
 
-        subdomain = hostname.split(".")[0]  # Extracts "na1" from "na1.api.riotgames.com"
-        return subdomain.lower()
+        routing_value = hostname.split(".")[0]  # Extracts "na1" from "na1.api.riotgames.com"
+        return routing_value.lower()
 
 
 class ApplicationRateLimiter(BaseRateLimitingLogic):
-    """Rate limiter for app-wide rate limits per subdomain (what Riot incorrectly calls region)."""
+    """Rate limiter for app-wide limits per Riot routing value."""
     def __init__(self, riot_endpoint: str, async_redis_client):
         super().__init__(riot_endpoint, async_redis_client)
         if ND_PRODUCTION:
@@ -73,7 +80,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         Generate application rate limit keys.
         This holds an integer count value that gets incremented by 1 per request. One half of what is_allowed() checks.
         """
-        return f"nd:application:count:{self.subdomain}:{window_type}"
+        return f"nd:application:count:{self.routing_value}:{window_type}"
     
     def generate_blocking_key(self):
         """
@@ -83,7 +90,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         then we use this blocking key with a TTL set to the "Retry-After" header's integer value so we respect the timeout
         for as long as it is valid whether or not our internal counts hit their limit.
         """
-        return f"nd:application:block:{self.subdomain}"
+        return f"nd:application:block:{self.routing_value}"
 
 
     def get_check_and_increment_script(self):
@@ -203,7 +210,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
                 seconds_key=self.seconds_key,
                 seconds_window=self.seconds_window,
                 minutes_window=self.minutes_window,
-                subdomain=self.subdomain,
+                routing_value=self.routing_value,
                 enforcement_type="internal",
                 riot_endpoint=self.riot_endpoint,
                 seconds_count=seconds_count,
@@ -248,7 +255,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
             seconds_window=self.seconds_window,
             minutes_window=self.minutes_window,
             enforcement_type="external",
-            subdomain=self.subdomain,
+            routing_value=self.routing_value,
             riot_endpoint=self.riot_endpoint,
             offending_context=offending_context,
             seconds_limit=self.seconds_limit,
@@ -259,14 +266,16 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
 
 class MethodRateLimiter(BaseRateLimitingLogic):
     """
-    Rate limiter that respects method (i.e. endpoint) based rate limits per subdomain
-    (A subdomain is what Riot incorrectly calls 'region' in their docs or what the 3rd Party Developer community calls a 'platform router').
+    Rate limiter that respects method (i.e. endpoint) based rate limits per routing value.
+    (A routing value is the subdomain in the generic web-development sense,
+    what Riot incorrectly calls 'region' in their docs, or what the 3rd Party
+    Developer community calls a 'platform router'.)
     """
 
     def __init__(self, riot_endpoint: str, async_redis_client):
         super().__init__(riot_endpoint, async_redis_client)
         self.service = derive_riot_service(riot_endpoint)
-        self.config = derive_riot_method_config(riot_endpoint, self.subdomain, self.service)
+        self.config = derive_riot_method_config(riot_endpoint, self.routing_value, self.service)
 
         self.method = self.config["method"]
         self.seconds_limit: int | None = self.config["seconds"]["limit"]
@@ -292,7 +301,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
     def generate_key(self, window_type: str) -> str:
         service = self.key_token(self.service)
         method = self.key_token(self.method)
-        return f"nd:method:count:{self.subdomain}:{service}:{method}:{window_type}"
+        return f"nd:method:count:{self.routing_value}:{service}:{method}:{window_type}"
 
     def generate_blocking_key(self):
         """
@@ -304,7 +313,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         """
         service = self.key_token(self.service)
         method = self.key_token(self.method)
-        return f"nd:method:block:{self.subdomain}:{service}:{method}"
+        return f"nd:method:block:{self.routing_value}:{service}:{method}"
 
     def get_check_and_increment_script(self):
         """Returns the Lua script content for atomic check and increment operations."""
@@ -448,12 +457,13 @@ class MethodRateLimiter(BaseRateLimitingLogic):
             raise MethodRateLimitExceeded(
                 retry_after=retry_after if retry_after >= 1 else 1,
                 method=self.method,
+                service=self.service,
                 minutes_key=self.minutes_key,
                 seconds_key=self.seconds_key,
                 seconds_window=self.seconds_window,
                 minutes_window=self.minutes_window,
                 enforcement_type="internal",
-                subdomain=self.subdomain,
+                routing_value=self.routing_value,
                 riot_endpoint=self.riot_endpoint,
                 seconds_count=seconds_count,
                 seconds_limit=self.seconds_limit,
@@ -497,7 +507,8 @@ class MethodRateLimiter(BaseRateLimitingLogic):
             minutes_window=self.minutes_window,
             enforcement_type="external",
             method=self.method,
-            subdomain=self.subdomain,
+            service=self.service,
+            routing_value=self.routing_value,
             riot_endpoint=self.riot_endpoint,
             offending_context=offending_context,
             seconds_limit=self.seconds_limit,
@@ -507,7 +518,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
 
 class ServiceRateLimiter(BaseRateLimitingLogic):
     """
-    Rate limiter for service-wide rate limits per subdomain (what Riot incorrectly calls region).
+    Rate limiter for service-wide rate limits per routing value.
     Note: that Riot does not provide the 'Retry-After' (and thus no retry after time integer) header when service rate limits are experienced.
     """
 
@@ -520,7 +531,7 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
     def generate_key(self) -> str:
         """Generate a unique key for the service rate limit."""
         service = self.key_token(self.service)
-        return f"nd:service:block:{self.subdomain}:{service}"
+        return f"nd:service:block:{self.routing_value}:{service}"
 
     async def is_allowed(self):
         """Check if the request is allowed under the service rate limit."""
@@ -529,7 +540,7 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
                 retry_after=self.__class__.SERVICE_BLOCK_DURATION,
                 service=self.service,
                 enforcement_type="internal",
-                subdomain=self.subdomain,
+                routing_value=self.routing_value,
                 riot_endpoint=self.riot_endpoint
                 )
         return True
@@ -542,7 +553,7 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
         raise ServiceRateLimitExceeded(
             retry_after=self.__class__.SERVICE_BLOCK_DURATION, # this will always be a default value for Service limits because Riot does not provide a time
             service=self.service,
-            subdomain=self.subdomain,
+            routing_value=self.routing_value,
             riot_endpoint=self.riot_endpoint,
             offending_context=offending_context,
             enforcement_type="external"
@@ -551,14 +562,14 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
 class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
     """Fallback limiter for unexpected Riot rate limits.
 
-    Most services retain the conservative shared subdomain fallback. Spectator's
+    Most services retain the conservative shared routing-value fallback. Spectator's
     active-game method has its own fallback because its server-enforced throttles
     are observed independently of the normal application, method, and service limits.
     """
     def __init__(self, riot_endpoint, async_redis_client):
         super().__init__(riot_endpoint, async_redis_client)
         self.service = derive_riot_service(riot_endpoint)
-        self.config = derive_riot_method_config(riot_endpoint, self.subdomain, self.service)
+        self.config = derive_riot_method_config(riot_endpoint, self.routing_value, self.service)
         self.method = self.config["method"]
         self.blocking_key = self.generate_blocking_key()
 
@@ -567,9 +578,9 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
         if self.service == "SPECTATOR-V5":
             service = self.key_token(self.service)
             method = self.key_token(self.method)
-            return f"nd:known-unpredictable:block:{self.subdomain}:{service}:{method}"
+            return f"nd:known-unpredictable:block:{self.routing_value}:{service}:{method}"
 
-        return f"nd:unspecified:block:{self.subdomain}:shared"
+        return f"nd:unspecified:block:{self.routing_value}:shared"
 
     async def is_allowed(self):
         """Check if the request is allowed under the experienced but unspecified rate limit."""
@@ -592,7 +603,7 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
                     "enforcement_type": "internal",
                     "service": self.service,
                     "method": self.method,
-                    "subdomain": self.subdomain,
+                    "routing_value": self.routing_value,
                     "riot_endpoint": self.riot_endpoint,
                     "blocking_key": self.blocking_key,
                     "remaining_ttl_seconds": remaining_ttl,
@@ -603,7 +614,7 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
                 service=self.service,
                 method=self.method,
                 enforcement_type="internal",
-                subdomain=self.subdomain,
+                routing_value=self.routing_value,
                 riot_endpoint=self.riot_endpoint,
                 offending_context=None
             )
@@ -621,7 +632,7 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
         raise UnspecifiedRateLimitExceeded(
             retry_after=retry_after,
             enforcement_type="external",
-            subdomain=self.subdomain,
+            routing_value=self.routing_value,
             riot_endpoint=self.riot_endpoint,
             offending_context=offending_context,
             service=self.service,

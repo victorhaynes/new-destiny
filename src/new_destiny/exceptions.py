@@ -79,7 +79,7 @@ class RiotNetworkError(RiotRelatedException):
 class RiotRelatedRateLimitException(Exception):
     retry_after: int
     enforcement_type: str
-    subdomain: str
+    routing_value: str
     riot_endpoint: str
     offending_context: RiotOffendingContext | None
 
@@ -88,14 +88,14 @@ class RiotRelatedRateLimitException(Exception):
         *,
         retry_after: int,
         enforcement_type: str,
-        subdomain: str,
+        routing_value: str,
         riot_endpoint: str,
         offending_context: RiotOffendingContext | None = None,
     ) -> None:
         super().__init__()
         self.retry_after = retry_after
         self.enforcement_type = enforcement_type
-        self.subdomain = subdomain
+        self.routing_value = routing_value
         self.riot_endpoint = riot_endpoint
         self.offending_context = offending_context # If enforcement_type="internal" this cannot be known, so it will default to None. Only exists when externally enforced
 
@@ -107,7 +107,7 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         minutes_key: str,
         seconds_key: str,
         enforcement_type: str,
-        subdomain: str,
+        routing_value: str,
         riot_endpoint: str,
         reason: str,
         seconds_limit: int,
@@ -121,7 +121,7 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         super().__init__(
             retry_after=retry_after,
             enforcement_type=enforcement_type,
-            subdomain=subdomain,
+            routing_value=routing_value,
             riot_endpoint=riot_endpoint,
             offending_context=offending_context,
         )
@@ -148,7 +148,7 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
             f"  minutes_limit: {self.minutes_limit}",
             f"  minutes_window: {self.minutes_window}",
             f"  enforcement_type: {self.enforcement_type}",
-            f"  subdomain: {self.subdomain}",
+            f"  routing_value: {self.routing_value}",
             f"  riot_endpoint: {self.riot_endpoint}",
             f"  reason: {self.reason}",
         ]
@@ -169,7 +169,7 @@ class ApplicationRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
             "minutes_count": self.minutes_count,
             "minutes_window": self.minutes_window,
             "enforcement_type": self.enforcement_type,
-            "subdomain": self.subdomain,
+            "routing_value": self.routing_value,
             "url": self.riot_endpoint,
             "reason": self.reason,
             "offending_context": self.offending_context
@@ -182,8 +182,9 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
         *,
         retry_after: int,
         method: str,
+        service: str,
         enforcement_type: str,
-        subdomain: str,
+        routing_value: str,
         riot_endpoint: str,
         reason: str,
         minutes_key: Optional[str] = None,
@@ -199,11 +200,12 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
         super().__init__(
             retry_after=retry_after,
             enforcement_type=enforcement_type,
-            subdomain=subdomain,
+            routing_value=routing_value,
             riot_endpoint=riot_endpoint,
             offending_context=offending_context,
         )
         self.method = method
+        self.service = service
         self.seconds_key = seconds_key
         self.seconds_count = seconds_count # Only exists when internally enforced. This represents the current count of the seconds_key stored in redis.
         self.seconds_limit = seconds_limit
@@ -219,6 +221,7 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
             "MethodRateLimitExceeded:",
             f"  retry_after: {self.retry_after}",
             f"  method: {self.method}",
+            f"  service: {self.service}",
             f"  seconds_key: {self.seconds_key}",
             f"  seconds_count: {self.seconds_count if self.seconds_count else 'N/A - Riot headers source of truth'}",
             f"  seconds_limit: {self.seconds_limit}",
@@ -228,7 +231,7 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
             f"  minutes_limit: {self.minutes_limit}",
             f"  minutes_window: {self.minutes_window}",
             f"  enforcement_type: {self.enforcement_type}",
-            f"  subdomain: {self.subdomain}",
+            f"  routing_value: {self.routing_value}",
             f"  riot_endpoint: {self.riot_endpoint}",
             f"  reason: {self.reason}",
         ]
@@ -241,10 +244,11 @@ class MethodRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExceptio
             "type": "MethodRateLimitExceeded",
             "retry_after": self.retry_after,
             "method": self.method,
+            "service": self.service,
             "minutes_key": self.minutes_key,
             "seconds_key": self.seconds_key,
             "enforcement_type": self.enforcement_type,
-            "subdomain": self.subdomain,
+            "routing_value": self.routing_value,
             "riot_endpoint": self.riot_endpoint,
             "reason": self.reason,
             "seconds_limit": self.seconds_limit,
@@ -262,14 +266,14 @@ class ServiceRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExcepti
         retry_after: int,
         service: str,
         enforcement_type: str,
-        subdomain: str,
+        routing_value: str,
         riot_endpoint: str,
         offending_context: RiotOffendingContext | None = None,
     ):
         super().__init__(
             retry_after=retry_after,
             enforcement_type=enforcement_type,
-            subdomain=subdomain,
+            routing_value=routing_value,
             riot_endpoint=riot_endpoint,
             offending_context=offending_context,
         )
@@ -281,7 +285,7 @@ class ServiceRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExcepti
             f"  retry_after: {self.retry_after}",
             f"  service: {self.service}",
             f"  enforcement_type: {self.enforcement_type}",
-            f"  subdomain: {self.subdomain}",
+            f"  routing_value: {self.routing_value}",
             f"  riot_endpoint: {self.riot_endpoint}",
         ]
         if self.offending_context is not None:
@@ -294,7 +298,7 @@ class ServiceRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExcepti
             "retry_after": self.retry_after,
             "service": self.service,
             "enforcement_type": self.enforcement_type,
-            "subdomain": self.subdomain,
+            "routing_value": self.routing_value,
             "riot_endpoint": self.riot_endpoint,
             "offending_context": self.offending_context,
         }
@@ -309,7 +313,7 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         self,
         *,
         retry_after: int,
-        subdomain: str,
+        routing_value: str,
         service: str,
         method: str,
         enforcement_type: str,
@@ -319,7 +323,7 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         super().__init__(
             retry_after=retry_after,
             enforcement_type=enforcement_type,
-            subdomain=subdomain,
+            routing_value=routing_value,
             riot_endpoint=riot_endpoint,
             offending_context=offending_context,
         )
@@ -333,7 +337,7 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
             f"  service: {self.service}",
             f"  method: {self.method}",
             f"  enforcement_type: {self.enforcement_type}",
-            f"  subdomain: {self.subdomain}",
+            f"  routing_value: {self.routing_value}",
             f"  riot_endpoint: {self.riot_endpoint}",
         ]
         if self.offending_context is not None:
@@ -344,9 +348,10 @@ class UnspecifiedRateLimitExceeded(RiotRelatedException, RiotRelatedRateLimitExc
         return {
             "type": "UnspecifiedRateLimitExceeded",
             "retry_after": self.retry_after,
+            "service": self.service,
             "method": self.method,
             "enforcement_type": self.enforcement_type,
-            "subdomain": self.subdomain,
+            "routing_value": self.routing_value,
             "riot_endpoint": self.riot_endpoint,
             "offending_context": self.offending_context,
         }
@@ -362,27 +367,33 @@ class RiotAPIError(RiotRelatedException):
     def __init__(self, status_code: int, riot_endpoint:str, message: JSONValue, offending_context: RiotOffendingContext | None = None):
         self.status_code = status_code
         self.message = message
-        self.subdomain = self.get_subdomain(riot_endpoint=riot_endpoint)
+        self.routing_value = self.get_routing_value(riot_endpoint=riot_endpoint)
         self.service = derive_riot_service(riot_endpoint=riot_endpoint)
-        self.method = derive_riot_method_config(riot_endpoint=riot_endpoint, router=self.subdomain, service=self.service)["method"]
+        self.method = derive_riot_method_config(riot_endpoint=riot_endpoint, router=self.routing_value, service=self.service)["method"]
         self.riot_endpoint = riot_endpoint
         self.offending_context = offending_context
 
-    def get_subdomain(self, riot_endpoint: str):
+    def get_routing_value(self, riot_endpoint: str):
+        """Extract the Riot routing value from the endpoint hostname.
+
+        This is the subdomain in the generic web-development sense. Riot
+        documentation incorrectly calls it a ``region``; the third-party
+        developer community often calls it a platform router.
+        """
         parsed_url = urlparse(riot_endpoint)
         hostname = parsed_url.hostname  # Ex. "na1.api.riotgames.com"
         
         if not hostname:
-            raise ValueError(f"Invalid URL: No hostname found. Subdomain (what Riot docs inaccurately calls per 'region' for per-region enforcement) cannot be determined from {riot_endpoint}")
+            raise ValueError(f"Invalid URL: No hostname found. Routing value cannot be determined from {riot_endpoint}")
 
-        subdomain = hostname.split(".")[0]  # Extracts "na1" from "na1.api.riotgames.com"
-        return subdomain.lower()
+        routing_value = hostname.split(".")[0]  # Extracts "na1" from "na1.api.riotgames.com"
+        return routing_value.lower()
     
     def __str__(self):
         lines = [
             "RiotAPIError:",
             f"  status_code: {self.status_code}",
-            f"  subdomain: {self.subdomain}",
+            f"  routing_value: {self.routing_value}",
             f"  message: {self.message}",
             f"  service: {self.service}",
             f"  method: {self.method}",
@@ -396,7 +407,7 @@ class RiotAPIError(RiotRelatedException):
         return {
             "type": "RiotAPIError",
             "status_code": self.status_code,
-            "subdomain": self.subdomain,
+            "routing_value": self.routing_value,
             "message": self.message,
             "service": self.service,
             "method": self.method,

@@ -1,12 +1,13 @@
 from .rate_limiter import ApplicationRateLimiter, MethodRateLimiter, ServiceRateLimiter, UnspecifiedRiotRateLimiter
-from .exceptions import RiotAPIError, RiotNetworkError
+from .exceptions import RiotAPIError, RiotNetworkError, RiotRelatedRateLimitException
 from .json_types import JSONValue, RiotResponse
+from .metrics import record_rate_limit_event
 import httpx
 from dotenv import load_dotenv
 from .utilities import custom_print
 from typing import Any, cast
 from json import JSONDecodeError
-from .settings.config import ND_RIOT_API_KEY, ND_LOG_LEVEL
+from .settings.config import ND_ENABLE_METRICS, ND_RIOT_API_KEY, ND_LOG_LEVEL
 load_dotenv()
 
 riot_key = ND_RIOT_API_KEY
@@ -19,6 +20,24 @@ def _parse_json_value(response: httpx.Response) -> JSONValue:
     return cast(JSONValue, response.json())
 
 async def perform_riot_request(
+    riot_endpoint: str,
+    client: httpx.AsyncClient,
+    async_redis_client: Any,
+) -> RiotResponse:
+    """Perform a request and record any raised rate-limit event."""
+    try:
+        return await _perform_riot_request(
+            riot_endpoint=riot_endpoint,
+            client=client,
+            async_redis_client=async_redis_client,
+        )
+    except RiotRelatedRateLimitException as error:
+        if ND_ENABLE_METRICS:
+            await record_rate_limit_event(async_redis_client, error)
+        raise
+
+
+async def _perform_riot_request(
     riot_endpoint: str, 
     client: httpx.AsyncClient, 
     async_redis_client: Any,
@@ -87,7 +106,7 @@ async def perform_riot_request(
         return None
 
     elif service_rate_limiter.service == 'MATCH-V5' and status == 403:
-        # This means the game mode was the new BRAWL game mode and the Riot API does not support it by their design choice
+        # This could mean the game mode was BRAWL. The Riot API does not support many of the for-fun modes by their design choice
         # https://x.com/RiotGamesDevRel/status/1922373887599489163
         if log_level >= 2:
             custom_print({
@@ -95,9 +114,9 @@ async def perform_riot_request(
                 "status_code": status,
                 "service": service_rate_limiter.service,
                 "method": method_rate_limiter.method,
-                "subdomain": service_rate_limiter.subdomain,
+                "routing_value": service_rate_limiter.routing_value,
                 "riot_endpoint": riot_endpoint,
-                "handling": "ignored_brawl_match_v5_response",
+                "handling": "likely_unupported_game_mode",
             }, color="cyan")
         return None
 
@@ -118,7 +137,7 @@ async def perform_riot_request(
                 "effective_retry_after_seconds": retry_after,
                 "service": service_rate_limiter.service,
                 "method": method_rate_limiter.method,
-                "subdomain": service_rate_limiter.subdomain,
+                "routing_value": service_rate_limiter.routing_value,
                 "riot_endpoint": riot_endpoint,
                 "fallback_blocking_key": unspecified_rate_limiter.blocking_key,
             }, color="yellow")
@@ -138,7 +157,7 @@ async def perform_riot_request(
                     "scope": "known-unpredictable_for_spectator_otherwise_unspecified",
                     "service": service_rate_limiter.service,
                     "method": method_rate_limiter.method,
-                    "subdomain": service_rate_limiter.subdomain,
+                    "routing_value": service_rate_limiter.routing_value,
                     "riot_endpoint": riot_endpoint,
                     "blocking_key": unspecified_rate_limiter.blocking_key,
                     "effective_retry_after_seconds": retry_after,
@@ -199,7 +218,7 @@ async def perform_riot_request(
                     "status_code": status,
                     "service": service_rate_limiter.service,
                     "method": method_rate_limiter.method,
-                    "subdomain": service_rate_limiter.subdomain,
+                    "routing_value": service_rate_limiter.routing_value,
                     "riot_endpoint": riot_endpoint,
                     "handling": "no_active_game",
                 }, color="cyan")

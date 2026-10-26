@@ -46,7 +46,9 @@ def derive_riot_method_config(
 ) -> dict:
     """
     Find the rate‐limit config for a given Riot API URL + service,
-    using the provided router (subdomain) to pick the right limits.
+    using the provided routing value (the subdomain in the generic
+    web-development sense, sometimes called a platform router or a region) to
+    pick the right limits.
 
     Returns a dict:
         {
