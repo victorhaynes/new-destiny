@@ -2,17 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0]
+## [1.1.0]
 ### Added
-- Added configurable, best-effort, one-minute-bucket Redis key counters for raised application, method, service, and unspecified rate-limit exceptions through `ND_ENABLE_METRICS` (enabled by default). Every counter includes the rate-limit category, routing value, enforcement type, and time bucket; service and method context is included according to the exception category. Counters expire after approximately 25 hours.
-- The intention is to enable data visualizations for a long running application on the state/health of its traffic. Should a consumer care to implement one it is now easy.
-- Added focused tests for rate-limit metric key construction, counter expiry, best-effort metrics failure handling, and public exception context.
+- Added configurable, best-effort, one-minute-bucket Redis key counters for raised application, method, service, and unspecified rate-limit exceptions through `ND_ENABLE_ERROR_METRICS` (enabled by default). Every counter includes the rate-limit category, routing value, enforcement type, and time bucket; service and method context is included according to the exception category. Counters expire after approximately 25 hours.
+- Added opt-in `ND_ENABLE_REQUEST_METRICS` for one-minute Redis counters of outbound requests admitted immediately before the HTTP call. It defaults to `0` because request traffic is substantially higher volume than rate-limit events.
+- Added request metric keys with routing value, service, method, and UTC-minute dimensions so applications can identify which Riot methods consume admitted traffic without publishing high-cardinality CloudWatch metrics.
+- Made metric counter expiry atomic and applied only on the first write to reduce Redis work for high-volume request metrics.
+- Added focused tests for rate-limit and request metric key construction, counter expiry, best-effort metrics failure handling, and public exception context.
 
 ### Changed
 - Renamed the public rate-limit and API error field `subdomain` to `routing_value`, including the rate-limiter context and structured log fields.
 - Added the triggering `service` to `MethodRateLimitExceeded` and `UnspecifiedRateLimitExceeded` while keeping each exception scoped to its relevant context.
 - Added a rate-limit recording boundary around `perform_riot_request()` so raised rate-limit exceptions are observed without changing the exception or request behavior when metrics recording fails.
+- Replaced the generic `ND_ENABLE_METRICS` setting with separate error and request metric controls. There is no compatibility alias for the old setting.
 - Reworked the README around a Quick Start, normal rate-limit enforcement, internal versus external outcomes, Spectator-V5 handling, detailed usage, and test/debugging guidance.
+
+## [1.0.0]
+### Added
+- Added the initial rate-limit exception metrics implementation.
 
 ## [0.3.9]
 ### Changed

@@ -13,8 +13,10 @@ import redis.asyncio
 import asyncio
 import time # Not a requirement, just for logging purposes
 
-# Rate-limit exception metrics are enabled by default. Set ND_ENABLE_METRICS=0
-# in your environment if you do not want the temporary Redis counters.
+# Rate-limit exception metrics are enabled by default. Set
+# ND_ENABLE_ERROR_METRICS=0 if you do not want those temporary Redis counters.
+# Admitted-request metrics are higher volume and disabled by default. Set
+# ND_ENABLE_REQUEST_METRICS=1 when you want method-level traffic analysis.
 
 # 2) Configure SSL Context for HTTPX. HTTPX uses this to verify Riot's HTTPS certificate.
 # The explicit Certifi bundle helps when local Python does not have its CA certificates configured.

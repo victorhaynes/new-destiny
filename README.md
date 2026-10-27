@@ -36,7 +36,8 @@ The hardest part of being a 3rd party Riot dev is waiting for production approva
 - `ND_REDIS_URL` takes a string value: enter the address your `Redis` instance is running on.
 Can be an actual address, "localhost", or "service_name" if your application code & `Redis` are in the same Docker compose stack.
 - `ND_REDIS_PORT` takes an integer value: enter the port number `Redis` is listening to.
-- `ND_ENABLE_METRICS` takes an optional integer value, `0` or `1`, and defaults to `1`. New Destiny records rate-limit exception counters by default; set it to `0` when you do not need dashboard or traffic-visualization data and want your Redis keyspace easier to inspect.
+- `ND_ENABLE_ERROR_METRICS` takes an optional integer value, `0` or `1`, and defaults to `1`. New Destiny records raised rate-limit exception counters by default; set it to `0` when you do not want that error observability data.
+- `ND_ENABLE_REQUEST_METRICS` takes an optional integer value, `0` or `1`, and defaults to `0`. Enable it when you want admitted-request traffic analysis by routing value, service, and method. It is off by default because it records substantially more traffic than error metrics.
 - `ND_LOG_LEVEL` takes a required integer from 0 to 3:
     - `0`: no New Destiny logging.
     - `1`: API and network errors, plus unexpected HTTP `404` responses.
@@ -55,7 +56,8 @@ ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_PRODUCTION=1
 ND_REDIS_URL="your_redis_address_or_docker_service_name"
 ND_REDIS_PORT=123
-ND_ENABLE_METRICS=1
+ND_ENABLE_ERROR_METRICS=1
+ND_ENABLE_REQUEST_METRICS=0
 ND_LOG_LEVEL=3
 ```
 In the rare case where Riot has given you heightened allowances you can configure your custom `Application Rate Limits` and window durations **using time in seconds--NOT minutes**. You are not allowed to use custom limits if you are not in production mode:
@@ -94,7 +96,8 @@ ND_RIOT_API_KEY="RGAPI-ABC-123"
 ND_PRODUCTION=0
 ND_REDIS_URL="localhost"
 ND_REDIS_PORT=6379
-ND_ENABLE_METRICS=1
+ND_ENABLE_ERROR_METRICS=1
+ND_ENABLE_REQUEST_METRICS=0
 ND_LOG_LEVEL=1
 ```
 
@@ -259,29 +262,40 @@ responses retain their normal error diagnostics and exception behavior.
 ## Metrics
 
 New Destiny records raised rate-limit exceptions as best-effort, one-minute
-Redis counters by default. Set `ND_ENABLE_METRICS=0` to disable the counters.
-These counters are observability data: they do not participate in request
-admission or blocking. If recording a metric fails, New Destiny leaves the
-original rate-limit exception and request behavior unchanged.
+Redis counters by default. Set `ND_ENABLE_ERROR_METRICS=0` to disable those
+counters. These counters are observability data: they do not participate in
+request admission or blocking. If recording a metric fails, New Destiny leaves
+the original rate-limit exception and request behavior unchanged.
 
 Metrics add temporary keys to the Redis database. Keep them enabled when you
 want to answer questions such as, "How many application rate limits did we
-experience in the last 12 hours?" or when you are building a dashboard or
-other traffic visualization. Set `ND_ENABLE_METRICS=0` if you do not need that
-observability data.
+experience in the last 12 hours?" or when you are building a dashboard.
+
+Request metrics are a separate, higher-volume family. Set
+`ND_ENABLE_REQUEST_METRICS=1` when you want to answer questions such as,
+"Which service and method consume the most admitted traffic?" A request
+counter is written only after all local limit checks pass and immediately
+before the HTTP call. It counts admitted outbound requests, including requests
+that later receive an external `429`; internally blocked requests do not create
+request counters.
 
 The metric key shape is:
 
 ```text
 nd:metrics:rate-limit:<type>:<routing-value>:<enforcement>[:<service>[:<method>]]:<utc-minute>
+nd:metrics:request:<routing-value>:<service>:<method>:<utc-minute>
 ```
 
-Every counter includes:
+Every rate-limit counter includes:
 
 - `type`: `application`, `method`, `service`, or `unspecified`.
 - `routing-value`: the Riot routing value, such as `na1` or `americas`.
 - `enforcement`: `internal` or `external`.
 - `utc-minute`: the UTC minute in which the exception was recorded.
+
+Every request counter includes the routing value, service, method, and UTC
+minute. It has no rate-limit type or enforcement field because it records an
+admitted request, not an exception.
 
 The service and method dimensions follow the scope of the exception:
 
@@ -290,11 +304,13 @@ The service and method dimensions follow the scope of the exception:
 - Method counters include the triggering service and method.
 - Unspecified counters include the service and method context available for the request.
 
-The counter value is the number of raised exceptions for that key during the
-UTC minute. Keys expire after approximately 25 hours, so consumers can sum
-minute buckets for one-hour, 24-hour, or other views. New Destiny records the
-detailed dimensions that are available; the consuming application decides
-which dimensions to retain, aggregate, or publish in a dashboard.
+The rate-limit counter value is the number of raised exceptions for that key
+during the UTC minute. The request counter value is the number of admitted
+requests for that key during the UTC minute. Both families expire after
+approximately 25 hours, so consumers can sum minute buckets for one-hour,
+24-hour, or other views. New Destiny records the detailed dimensions that are
+available; the consuming application decides which dimensions to retain,
+aggregate, or publish in a dashboard.
 
 # Usage
 
@@ -1039,6 +1055,8 @@ nd:known-unpredictable:block:<routing-value>:<service>:<method>
 
 # Observed rate-limit exception counters, retained for approximately 25 hours
 nd:metrics:rate-limit:<type>:<routing-value>:<enforcement>[:<service>[:<method>]]:<utc-minute>
+# Admitted outbound request counters, disabled by default, retained for approximately 25 hours
+nd:metrics:request:<routing-value>:<service>:<method>:<utc-minute>
 ```
 
 `<routing-value>` is the routing value token derived from the Riot hostname.
@@ -1046,7 +1064,9 @@ nd:metrics:rate-limit:<type>:<routing-value>:<enforcement>[:<service>[:<method>]
 method path. The `known-unpredictable` family is currently used for the
 Spectator active-game method; its method-and-routing-value scope prevents that
 endpoint's unusual throttles from blocking unrelated traffic.
-The metrics family is created only when metrics are enabled and a rate-limit exception is raised. Its
+The rate-limit metrics family is created when error metrics are enabled and a
+rate-limit exception is raised. The request metrics family is created only
+when request metrics are enabled and a request passes local admission. Their
 semantics are documented in the [Metrics](#metrics) section.
 For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.

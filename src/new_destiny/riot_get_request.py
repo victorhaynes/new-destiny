@@ -1,13 +1,18 @@
 from .rate_limiter import ApplicationRateLimiter, MethodRateLimiter, ServiceRateLimiter, UnspecifiedRiotRateLimiter
 from .exceptions import RiotAPIError, RiotNetworkError, RiotRelatedRateLimitException
 from .json_types import JSONValue, RiotResponse
-from .metrics import record_rate_limit_event
+from .metrics import record_rate_limit_event, record_request_event
 import httpx
 from dotenv import load_dotenv
 from .utilities import custom_print
 from typing import Any, cast
 from json import JSONDecodeError
-from .settings.config import ND_ENABLE_METRICS, ND_RIOT_API_KEY, ND_LOG_LEVEL
+from .settings.config import (
+    ND_ENABLE_ERROR_METRICS,
+    ND_ENABLE_REQUEST_METRICS,
+    ND_RIOT_API_KEY,
+    ND_LOG_LEVEL,
+)
 load_dotenv()
 
 riot_key = ND_RIOT_API_KEY
@@ -32,7 +37,7 @@ async def perform_riot_request(
             async_redis_client=async_redis_client,
         )
     except RiotRelatedRateLimitException as error:
-        if ND_ENABLE_METRICS:
+        if ND_ENABLE_ERROR_METRICS:
             await record_rate_limit_event(async_redis_client, error)
         raise
 
@@ -63,6 +68,14 @@ async def _perform_riot_request(
     await service_rate_limiter.is_allowed()
     await unspecified_rate_limiter.is_allowed()
     if log_level >= 3: custom_print("rate limiter checks passed", color="black")
+
+    if ND_ENABLE_REQUEST_METRICS:
+        await record_request_event(
+            async_redis_client,
+            routing_value=service_rate_limiter.routing_value,
+            service=service_rate_limiter.service,
+            method=method_rate_limiter.method,
+        )
 
     # Perform the GET request with network error handling
     try:

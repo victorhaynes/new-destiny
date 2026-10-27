@@ -1,4 +1,4 @@
-"""Best-effort Redis counters for observed New Destiny rate-limit events."""
+"""Best-effort Redis counters for New Destiny traffic observations."""
 
 from __future__ import annotations
 
@@ -15,7 +15,16 @@ from .exceptions import (
     UnspecifiedRateLimitExceeded,
 )
 RATE_LIMIT_METRICS_RETENTION_SECONDS = 25 * 60 * 60
+REQUEST_METRICS_RETENTION_SECONDS = 25 * 60 * 60
 logger = logging.getLogger(__name__)
+
+_INCREMENT_AND_EXPIRE_ON_FIRST_WRITE = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
 
 
 def _key_token(value: str) -> str:
@@ -66,6 +75,50 @@ def build_rate_limit_metric_key(
     return ":".join(parts)
 
 
+def build_request_metric_key(
+    *,
+    routing_value: str,
+    service: str,
+    method: str,
+    now: datetime | None = None,
+) -> str:
+    """Build a minute bucket for one admitted outbound Riot request."""
+    return ":".join(
+        (
+            "nd",
+            "metrics",
+            "request",
+            _key_token(routing_value),
+            _key_token(service),
+            _key_token(method),
+            _minute_bucket(now),
+        )
+    )
+
+
+async def _record_counter(
+    async_redis_client: Any,
+    *,
+    key: str,
+    retention_seconds: int,
+) -> str:
+    """Increment a counter and set its TTL only on the first write."""
+    try:
+        await async_redis_client.eval(
+            _INCREMENT_AND_EXPIRE_ON_FIRST_WRITE,
+            1,
+            key,
+            retention_seconds,
+        )
+    except Exception as metric_error:  # pragma: no cover - exercised by integration failures
+        logger.warning(
+            "New Destiny metric recording failed for %s: %s",
+            key,
+            type(metric_error).__name__,
+        )
+    return key
+
+
 async def record_rate_limit_event(
     async_redis_client: Any,
     error: RiotRelatedRateLimitException,
@@ -74,22 +127,36 @@ async def record_rate_limit_event(
 ) -> str:
     """Increment one bucketed counter without affecting rate-limit handling.
 
-    The Redis pipeline keeps the increment and TTL update in one round trip.
+    A Redis Lua script keeps the increment and first-write TTL update atomic.
     Metrics are best effort: a Redis metrics failure must never replace the
     rate-limit exception that the caller needs to handle.
     """
     key = build_rate_limit_metric_key(error, now=now)
 
-    try:
-        pipeline = async_redis_client.pipeline(transaction=True)
-        pipeline.incr(key)
-        pipeline.expire(key, RATE_LIMIT_METRICS_RETENTION_SECONDS)
-        await pipeline.execute()
-    except Exception as metric_error:  # pragma: no cover - exercised by integration failures
-        logger.warning(
-            "New Destiny rate-limit metric recording failed for %s: %s",
-            key,
-            type(metric_error).__name__,
-        )
+    return await _record_counter(
+        async_redis_client,
+        key=key,
+        retention_seconds=RATE_LIMIT_METRICS_RETENTION_SECONDS,
+    )
 
-    return key
+
+async def record_request_event(
+    async_redis_client: Any,
+    *,
+    routing_value: str,
+    service: str,
+    method: str,
+    now: datetime | None = None,
+) -> str:
+    """Record one request admitted immediately before the HTTP call is sent."""
+    key = build_request_metric_key(
+        routing_value=routing_value,
+        service=service,
+        method=method,
+        now=now,
+    )
+    return await _record_counter(
+        async_redis_client,
+        key=key,
+        retention_seconds=REQUEST_METRICS_RETENTION_SECONDS,
+    )
