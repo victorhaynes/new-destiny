@@ -6,6 +6,8 @@ from .settings.config import ND_CUSTOM_MINUTES_LIMIT, ND_CUSTOM_MINUTES_WINDOW, 
 from .json_types import RiotOffendingContext
 from .utilities import custom_print
 
+DEFAULT_RETRY_AFTER_SECONDS = 61
+
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
 ###### Rate Limier Classes ###########
@@ -229,7 +231,7 @@ class ApplicationRateLimiter(BaseRateLimitingLogic):
         with a value of "application"
         """
         if not retry_after:
-            retry_after = 68
+            retry_after = DEFAULT_RETRY_AFTER_SECONDS
             
         # Make sure scripts are initialized
         if self.blocking_script_sha is None:
@@ -480,7 +482,7 @@ class MethodRateLimiter(BaseRateLimitingLogic):
         429 response with X-Rate-Limit-Type header with a value of "method"
         """
         if not retry_after:
-            retry_after = 68
+            retry_after = DEFAULT_RETRY_AFTER_SECONDS
         
         # Make sure scripts are initialized
         if self.blocking_script_sha is None:
@@ -519,10 +521,11 @@ class MethodRateLimiter(BaseRateLimitingLogic):
 class ServiceRateLimiter(BaseRateLimitingLogic):
     """
     Rate limiter for service-wide rate limits per routing value.
-    Note: that Riot does not provide the 'Retry-After' (and thus no retry after time integer) header when service rate limits are experienced.
+    Riot commonly omits the 'Retry-After' header for service rate limits, so the
+    class retains a short fallback while accepting a usable value when one is present.
     """
 
-    SERVICE_BLOCK_DURATION = 68
+    SERVICE_BLOCK_DURATION = DEFAULT_RETRY_AFTER_SECONDS
     def __init__(self, riot_endpoint: str, async_redis_client):
         super().__init__(riot_endpoint, async_redis_client)
         self.service = derive_riot_service(riot_endpoint)
@@ -545,13 +548,20 @@ class ServiceRateLimiter(BaseRateLimitingLogic):
                 )
         return True
     
-    async def write_inbound_service_rate_limit(self, offending_context: RiotOffendingContext):
-        """Set the service rate limit key in Redis with a TTL."""
-        # Create the key with a 68-second TTL if it doesn't already exist (NX)
-        await self.redis.set(self.service_key, 1, ex=self.__class__.SERVICE_BLOCK_DURATION, nx=True)
+    async def write_inbound_service_rate_limit(
+        self,
+        offending_context: RiotOffendingContext,
+        retry_after: int | None = None,
+    ):
+        """Set the service block, using a valid Riot value when one is present."""
+        effective_retry_after = (
+            retry_after if retry_after is not None and retry_after >= 1
+            else self.__class__.SERVICE_BLOCK_DURATION
+        )
+        await self.redis.set(self.service_key, 1, ex=effective_retry_after, nx=True)
 
         raise ServiceRateLimitExceeded(
-            retry_after=self.__class__.SERVICE_BLOCK_DURATION, # this will always be a default value for Service limits because Riot does not provide a time
+            retry_after=effective_retry_after,
             service=self.service,
             routing_value=self.routing_value,
             riot_endpoint=self.riot_endpoint,
@@ -626,8 +636,8 @@ class UnspecifiedRiotRateLimiter(BaseRateLimitingLogic):
         429 response with a missing X-Rate-Limit-Type header or unknown value. 
         """
         if not retry_after:
-            retry_after = 68
-        # Create the key with a 68-second TTL if it doesn't already exist (NX)
+            retry_after = DEFAULT_RETRY_AFTER_SECONDS
+        # Create the key with the configured fallback TTL if it doesn't already exist (NX)
         await self.redis.set(self.blocking_key, 1, ex=retry_after, nx=True)
         raise UnspecifiedRateLimitExceeded(
             retry_after=retry_after,

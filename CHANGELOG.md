@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0]
+### Added
+- Added minute-scoped Redis hash metrics for raised rate-limit exceptions, including effective waits and best-effort Riot `Retry-After` observations.
+- Added separate counts for missing and unusable external `Retry-After` headers without changing the protective fallback behavior.
+
+### Changed
+- Made externally enforced `429` handling resilient to missing or malformed JSON bodies and unusable `Retry-After` values.
+- Service rate-limit blocks now use a usable positive Riot retry value when one is present and otherwise retain the 61-second fallback.
+
 ## [1.1.0]
 ### Added
 - Added configurable, best-effort, one-minute-bucket Redis key counters for raised application, method, service, and unspecified rate-limit exceptions through `ND_ENABLE_ERROR_METRICS` (enabled by default). Every counter includes the rate-limit category, routing value, enforcement type, and time bucket; service and method context is included according to the exception category. Counters expire after approximately 25 hours.

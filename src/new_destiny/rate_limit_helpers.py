@@ -1,7 +1,5 @@
-from urllib.parse import urlparse, unquote
+from urllib.parse import ParseResult, unquote, urlparse
 import re
-import json
-import gzip
 
 ###### Helper Functions ######
 ###### Helper Functions ######

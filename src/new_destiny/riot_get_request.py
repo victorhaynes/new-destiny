@@ -1,4 +1,10 @@
-from .rate_limiter import ApplicationRateLimiter, MethodRateLimiter, ServiceRateLimiter, UnspecifiedRiotRateLimiter
+from .rate_limiter import (
+    DEFAULT_RETRY_AFTER_SECONDS,
+    ApplicationRateLimiter,
+    MethodRateLimiter,
+    ServiceRateLimiter,
+    UnspecifiedRiotRateLimiter,
+)
 from .exceptions import RiotAPIError, RiotNetworkError, RiotRelatedRateLimitException
 from .json_types import JSONValue, RiotResponse
 from .metrics import record_rate_limit_event, record_request_event
@@ -23,6 +29,21 @@ auth_headers: dict[str, str] = {"X-Riot-Token": riot_key}
 def _parse_json_value(response: httpx.Response) -> JSONValue:
     """Cast the JSON boundary returned by httpx into the library's JSON type."""
     return cast(JSONValue, response.json())
+
+
+def _resolve_retry_after(value: str | None) -> tuple[int, str]:
+    """Resolve Riot's optional numeric header without weakening the block path."""
+    if value is None or not value.strip():
+        return DEFAULT_RETRY_AFTER_SECONDS, "missing"
+
+    try:
+        seconds = int(value.strip())
+    except ValueError:
+        return DEFAULT_RETRY_AFTER_SECONDS, "unusable"
+
+    if seconds < 1:
+        return DEFAULT_RETRY_AFTER_SECONDS, "unusable"
+    return seconds + 1, "valid"
 
 async def perform_riot_request(
     riot_endpoint: str,
@@ -67,7 +88,8 @@ async def _perform_riot_request(
     await method_rate_limiter.check_and_increment()
     await service_rate_limiter.is_allowed()
     await unspecified_rate_limiter.is_allowed()
-    if log_level >= 3: custom_print("rate limiter checks passed", color="black")
+    if log_level >= 3:
+        custom_print("rate limiter checks passed", color="black")
 
     if ND_ENABLE_REQUEST_METRICS:
         await record_request_event(
@@ -79,7 +101,8 @@ async def _perform_riot_request(
 
     # Perform the GET request with network error handling
     try:
-        if log_level >= 3: custom_print(riot_endpoint, color="black")
+        if log_level >= 3:
+            custom_print(riot_endpoint, color="black")
         response = await client.get(riot_endpoint, headers=auth_headers)
     except httpx.TimeoutException as e:
         raise RiotNetworkError(
@@ -136,9 +159,14 @@ async def _perform_riot_request(
     # Rate limited by Riot
     elif status == 429:
         headers = dict(response.headers)
-        body = _parse_json_value(response)
+        try:
+            body = _parse_json_value(response)
+        except (JSONDecodeError, ValueError):
+            # The status and headers are sufficient to protect the request path.
+            # A missing or malformed body should not suppress the protective block.
+            body = None
         retry_after_header = headers.get("retry-after")
-        retry_after = int(retry_after_header or 68) + 1
+        retry_after, retry_after_source = _resolve_retry_after(retry_after_header)
         rate_limit_type = headers.get("x-rate-limit-type", None)
         if log_level >= 2:
             custom_print({
@@ -147,6 +175,7 @@ async def _perform_riot_request(
                 "rate_limit_type": rate_limit_type or "unspecified",
                 "enforcement_type": "external",
                 "retry_after_header_seconds": retry_after_header or "missing",
+                "retry_after_source": retry_after_source,
                 "effective_retry_after_seconds": retry_after,
                 "service": service_rate_limiter.service,
                 "method": method_rate_limiter.method,
@@ -160,7 +189,10 @@ async def _perform_riot_request(
         elif rate_limit_type == "method":
             await method_rate_limiter.write_inbound_method_rate_limit(retry_after=retry_after, offending_context={"headers": headers, "body": body})
         elif rate_limit_type == "service":
-            await service_rate_limiter.write_inbound_service_rate_limit(offending_context={"headers": headers, "body": body}) # Note this takes a default value defined in the ServiceRateLimiter class
+            await service_rate_limiter.write_inbound_service_rate_limit(
+                retry_after=retry_after if retry_after_source == "valid" else None,
+                offending_context={"headers": headers, "body": body},
+            )
         else: # If Riot failed to provide the X-Rate-Limit-Type header which is a bug that has rarely been observed...write a block-all to be respectful
             if log_level >= 2:
                 custom_print({

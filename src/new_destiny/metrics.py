@@ -1,4 +1,4 @@
-"""Best-effort Redis counters for New Destiny traffic observations."""
+"""Best-effort Redis metrics for New Destiny traffic observations."""
 
 from __future__ import annotations
 
@@ -24,6 +24,31 @@ if count == 1 then
     redis.call('EXPIRE', KEYS[1], ARGV[1])
 end
 return count
+"""
+
+_INCREMENT_HASH_FIELDS_AND_EXPIRE_ON_FIRST_WRITE = """
+local existed = redis.call('EXISTS', KEYS[1])
+local key_type = redis.call('TYPE', KEYS[1])
+if (type(key_type) == 'string' and key_type == 'string')
+    or (type(key_type) == 'table' and key_type.ok == 'string') then
+    -- The pre-hash metric used this same key as an integer string counter.
+    -- Metrics are temporary, so replacing that value is the safe migration.
+    redis.call('DEL', KEYS[1])
+    existed = 0
+end
+local events = 0
+for index = 2, #ARGV, 2 do
+    local field = ARGV[index]
+    local increment = tonumber(ARGV[index + 1])
+    local value = redis.call('HINCRBY', KEYS[1], field, increment)
+    if field == 'events' then
+        events = value
+    end
+end
+if existed == 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return events
 """
 
 
@@ -119,23 +144,77 @@ async def _record_counter(
     return key
 
 
+def _retry_after_metric_fields(error: RiotRelatedRateLimitException) -> list[tuple[str, int]]:
+    """Return bounded retry-after observations for one raised exception."""
+    fields = [("events", 1), (f"effective_retry_after_seconds:{error.retry_after}", 1)]
+    if error.enforcement_type != "external":
+        return fields
+
+    headers = (error.offending_context or {}).get("headers", {})
+    raw_retry_after = headers.get("retry-after")
+    if raw_retry_after is None or not str(raw_retry_after).strip():
+        fields.append(("riot_retry_after_missing", 1))
+        return fields
+
+    try:
+        retry_after = int(str(raw_retry_after).strip())
+    except (TypeError, ValueError):
+        fields.append(("riot_retry_after_unusable", 1))
+        return fields
+
+    if retry_after < 1:
+        fields.append(("riot_retry_after_unusable", 1))
+    else:
+        fields.append((f"riot_retry_after_seconds:{retry_after}", 1))
+    return fields
+
+
+async def _record_hash(
+    async_redis_client: Any,
+    *,
+    key: str,
+    fields: list[tuple[str, int]],
+    retention_seconds: int,
+) -> str:
+    """Increment hash fields and set the hash TTL atomically on first write."""
+    try:
+        arguments: list[object] = [retention_seconds]
+        for field, increment in fields:
+            arguments.extend((field, increment))
+        await async_redis_client.eval(
+            _INCREMENT_HASH_FIELDS_AND_EXPIRE_ON_FIRST_WRITE,
+            1,
+            key,
+            *arguments,
+        )
+    except Exception as metric_error:  # pragma: no cover - exercised by integration failures
+        logger.warning(
+            "New Destiny metric recording failed for %s: %s",
+            key,
+            type(metric_error).__name__,
+        )
+    return key
+
+
 async def record_rate_limit_event(
     async_redis_client: Any,
     error: RiotRelatedRateLimitException,
     *,
     now: datetime | None = None,
 ) -> str:
-    """Increment one bucketed counter without affecting rate-limit handling.
+    """Record one bucketed rate-limit observation without affecting handling.
 
-    A Redis Lua script keeps the increment and first-write TTL update atomic.
+    A Redis hash keeps the event count and retry-after observations together.
+    A Redis Lua script keeps field increments and the first-write TTL update atomic.
     Metrics are best effort: a Redis metrics failure must never replace the
     rate-limit exception that the caller needs to handle.
     """
     key = build_rate_limit_metric_key(error, now=now)
 
-    return await _record_counter(
+    return await _record_hash(
         async_redis_client,
         key=key,
+        fields=_retry_after_metric_fields(error),
         retention_seconds=RATE_LIMIT_METRICS_RETENTION_SECONDS,
     )
 

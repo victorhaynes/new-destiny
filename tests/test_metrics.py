@@ -13,9 +13,12 @@ from new_destiny.exceptions import (
 from new_destiny.metrics import (
     build_rate_limit_metric_key,
     build_request_metric_key,
+    _retry_after_metric_fields,
     record_rate_limit_event,
     record_request_event,
 )
+from new_destiny.riot_get_request import _resolve_retry_after
+from new_destiny.rate_limiter import ServiceRateLimiter
 
 
 BUCKET = datetime(2026, 10, 26, 20, 41, 35, tzinfo=timezone.utc)
@@ -58,7 +61,7 @@ def _application_error() -> ApplicationRateLimitExceeded:
         ),
         (
             ServiceRateLimitExceeded(
-                retry_after=68,
+                retry_after=61,
                 service="MATCH-V5",
                 enforcement_type="external",
                 routing_value="americas",
@@ -92,6 +95,14 @@ class EvalRedis:
         return 1
 
 
+class SetRedis:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    async def set(self, *args: object, **kwargs: object) -> None:
+        self.calls.append((*args, kwargs))
+
+
 @pytest.mark.asyncio
 async def test_record_rate_limit_event_increments_and_expires_one_key() -> None:
     redis = EvalRedis()
@@ -100,7 +111,100 @@ async def test_record_rate_limit_event_increments_and_expires_one_key() -> None:
     key = await record_rate_limit_event(redis, error, now=BUCKET)
 
     assert key == "nd:metrics:rate-limit:application:na1:internal:2026-10-26T20:41Z"
-    assert redis.calls[0][1:] == (1, key, 25 * 60 * 60)
+    assert redis.calls[0][1:] == (
+        1,
+        key,
+        25 * 60 * 60,
+        "events",
+        1,
+        "effective_retry_after_seconds:10",
+        1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_service_rate_limit_uses_the_61_second_fallback() -> None:
+    redis = SetRedis()
+    limiter = ServiceRateLimiter(
+        "https://americas.api.riotgames.com/lol/match/v5/matches/NA1_1",
+        redis,
+    )
+
+    with pytest.raises(ServiceRateLimitExceeded) as raised:
+        await limiter.write_inbound_service_rate_limit(
+            offending_context={"headers": {}, "body": None},
+            retry_after=None,
+        )
+
+    assert raised.value.retry_after == 61
+    assert redis.calls[0] == (
+        limiter.service_key,
+        1,
+        {"ex": 61, "nx": True},
+    )
+
+
+def test_external_retry_after_metrics_keep_raw_and_effective_values() -> None:
+    error = MethodRateLimitExceeded(
+        retry_after=61,
+        method="/lol/match/v5/matches",
+        service="MATCH-V5",
+        enforcement_type="external",
+        routing_value="americas",
+        riot_endpoint="https://americas.api.riotgames.com/lol/match/v5/matches/NA1_1",
+        reason="method limit",
+        offending_context={
+            "headers": {"retry-after": "60"},
+            "body": None,
+        },
+    )
+
+    assert dict(_retry_after_metric_fields(error)) == {
+        "events": 1,
+        "effective_retry_after_seconds:61": 1,
+        "riot_retry_after_seconds:60": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("headers", "field"),
+    [
+        ({}, "riot_retry_after_missing"),
+        ({"retry-after": "Wed, 21 Oct 2015 07:28:00 GMT"}, "riot_retry_after_unusable"),
+        ({"retry-after": "not-a-number"}, "riot_retry_after_unusable"),
+    ],
+)
+def test_external_retry_after_metrics_classify_missing_or_unusable_values(
+    headers: dict[str, str],
+    field: str,
+) -> None:
+    error = ServiceRateLimitExceeded(
+        retry_after=61,
+        service="MATCH-V5",
+        enforcement_type="external",
+        routing_value="americas",
+        riot_endpoint="https://americas.api.riotgames.com/lol/match/v5/matches/NA1_1",
+        offending_context={"headers": headers, "body": None},
+    )
+
+    assert dict(_retry_after_metric_fields(error))[field] == 1
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, (61, "missing")),
+        ("60", (61, "valid")),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", (61, "unusable")),
+        ("not-a-number", (61, "unusable")),
+        ("0", (61, "unusable")),
+    ],
+)
+def test_retry_after_resolution_always_returns_a_protective_value(
+    value: str | None,
+    expected: tuple[int, str],
+) -> None:
+    assert _resolve_retry_after(value) == expected
 
 
 def test_request_metric_key_captures_the_admission_scope() -> None:
@@ -275,3 +379,85 @@ async def test_request_path_records_only_after_admission(monkeypatch: pytest.Mon
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_malformed_429_body_and_retry_after_still_write_a_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ND_RIOT_API_KEY", "test-key")
+    monkeypatch.setenv("ND_REDIS_URL", "localhost")
+    monkeypatch.setenv("ND_REDIS_PORT", "6379")
+    monkeypatch.setenv("ND_LOG_LEVEL", "0")
+    monkeypatch.setenv("ND_PRODUCTION", "0")
+    request_module = importlib.import_module("new_destiny.riot_get_request")
+    block_calls: list[tuple[int, object]] = []
+
+    class FakeApplicationLimiter:
+        def __init__(self, *args: object) -> None:
+            pass
+
+        async def check_and_increment(self) -> None:
+            pass
+
+        async def write_inbound_application_rate_limit(
+            self,
+            *,
+            retry_after: int,
+            offending_context: object,
+        ) -> None:
+            block_calls.append((retry_after, offending_context))
+            raise _application_error()
+
+    class FakeMethodLimiter:
+        method = "/lol/match/v5/matches"
+
+        def __init__(self, *args: object) -> None:
+            pass
+
+        async def check_and_increment(self) -> None:
+            pass
+
+    class FakeServiceLimiter:
+        service = "MATCH-V5"
+
+        def __init__(self, *args: object) -> None:
+            pass
+
+        async def is_allowed(self) -> None:
+            pass
+
+    class FakeUnspecifiedLimiter:
+        def __init__(self, *args: object) -> None:
+            pass
+
+        async def is_allowed(self) -> None:
+            pass
+
+    class FakeClient:
+        async def get(self, *args: object, **kwargs: object) -> httpx.Response:
+            return httpx.Response(
+                429,
+                headers={
+                    "x-rate-limit-type": "application",
+                    "retry-after": "not-a-number",
+                },
+                content=b"not json",
+                request=httpx.Request("GET", "https://americas.api.riotgames.com"),
+            )
+
+    monkeypatch.setattr(request_module, "ApplicationRateLimiter", FakeApplicationLimiter)
+    monkeypatch.setattr(request_module, "MethodRateLimiter", FakeMethodLimiter)
+    monkeypatch.setattr(request_module, "ServiceRateLimiter", FakeServiceLimiter)
+    monkeypatch.setattr(request_module, "UnspecifiedRiotRateLimiter", FakeUnspecifiedLimiter)
+    monkeypatch.setattr(request_module, "ND_ENABLE_REQUEST_METRICS", 0)
+
+    with pytest.raises(ApplicationRateLimitExceeded):
+        await request_module._perform_riot_request(
+            "https://americas.api.riotgames.com/lol/match/v5/matches/NA1_1",
+            FakeClient(),
+            object(),
+        )
+
+    assert block_calls[0][0] == 61
+    assert block_calls[0][1]["body"] is None

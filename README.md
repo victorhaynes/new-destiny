@@ -222,10 +222,15 @@ Rate-limit debug events include the same `enforcement_type` values. A
 Riot can return a `429` status code with an unrecognized or missing
 `x-rate-limit-type`. New Destiny treats this as an unspecified,
 externally enforced limit. The package records the response's `Retry-After`
-value when it is available, writes a temporary Redis block, and raises
+value when it is a usable positive integer, otherwise uses its protective
+fallback duration, writes a temporary Redis block, and raises
 `UnspecifiedRateLimitExceeded` with `enforcement_type="external"`.
 Subsequent requests are blocked internally until the temporary Redis block
 expires. There is a `Spectator-V5` API/service specific exception described below.
+
+The response body is diagnostic context only. If Riot returns no body or a body
+that is not valid JSON, New Destiny still handles the `429` from its status and
+headers and continues with the protective block.
 
 # Spectator-V5 API (Service) Specific, Active-Game Bad Behavior - Edge Cases cont.
 
@@ -993,8 +998,11 @@ That is why I pulled my rate limit values from actual response headers and not f
 ### What about Service Rate Limits?
  
 `New Destiny` handles them as they are served.
-It's unknowable when they’ll occur, and they do **not** come with `retry-after` headers. You can think of them as outages beyond our control.
-There is a default retry time of 68 seconds if a `ServiceRateLimitExceeded` exception occurs.
+It's unknowable when they’ll occur, and Riot commonly does not include a
+`retry-after` header. If a usable positive integer is present, New Destiny uses
+it with the same small safety buffer as other externally enforced limits. If it
+is missing, non-numeric, or otherwise unusable, the service fallback is 61
+seconds. You can think of service throttles as outages beyond our control.
 If you want to be less cautious than I am, you can change the `SERVICE_BLOCK_DURATION` value in `rate_limiter.py` 
 to any integer greater than 0 in your own installation.
 
@@ -1053,7 +1061,7 @@ nd:service:block:<routing-value>:<service>
 nd:unspecified:block:<routing-value>:shared
 nd:known-unpredictable:block:<routing-value>:<service>:<method>
 
-# Observed rate-limit exception counters, retained for approximately 25 hours
+# Observed rate-limit exception hashes, retained for approximately 25 hours
 nd:metrics:rate-limit:<type>:<routing-value>:<enforcement>[:<service>[:<method>]]:<utc-minute>
 # Admitted outbound request counters, disabled by default, retained for approximately 25 hours
 nd:metrics:request:<routing-value>:<service>:<method>:<utc-minute>
@@ -1068,6 +1076,17 @@ The rate-limit metrics family is created when error metrics are enabled and a
 rate-limit exception is raised. The request metrics family is created only
 when request metrics are enabled and a request passes local admission. Their
 semantics are documented in the [Metrics](#metrics) section.
+Rate-limit keys are Redis hashes with these fields:
+
+- `events`: the number of raised exceptions in the UTC-minute bucket.
+- `riot_retry_after_seconds:<n>`: external events where Riot supplied the positive integer `n`.
+- `riot_retry_after_missing`: external events where Riot did not supply the header.
+- `riot_retry_after_unusable`: external events where the header was present but not a usable positive integer, including unsupported HTTP-date text.
+- `effective_retry_after_seconds:<n>`: the wait New Destiny applied to the exception/block.
+
+The fields are counters inside the same minute-scoped hash, not separate event
+keys. Consumers can sum them over a time window without publishing one external
+metric for every routing value, service, method, or retry duration.
 For a given outbound request you can see what rate limits apply to the request, how long the current count is valid for (the key's TTL) and what your current count is.
 Additionally, all of the New Destiny specific errors tell you what endpoint caused the error and they capture useful metadata about the request.
 
